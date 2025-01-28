@@ -338,7 +338,7 @@ public:
         Debugging::pu8Vec(packet.realCont, 8, true, "Client Finished content");
         packet.realCont = encPlainText(packet);
         Debugging::pu8Vec(packet.realCont, 8, true, "Client Finished content(encrypted)");
-        m_state_ = TLS_State_::HandshakeFinished;
+        m_state_ = TLS_State_::ClientFinished_;
         return {packet};
     }
 
@@ -352,7 +352,6 @@ public:
         stdcopy_to_big_endian(tpt.realCont.size(), std::back_inserter(dataToHash), 2);
         dataToHash.insert(dataToHash.end(), tpt.realCont.begin(), tpt.realCont.end());
         Debugging::pu8Vec(dataToHash, 8, true, "data to hash");
-
 
         auto hash_ = getCSMACInfo().algo({getClientWriteMACKey(), dataToHash});
         Debugging::pu8Vec(hash_, 8, true, "hash in data");
@@ -373,7 +372,7 @@ public:
 
         auto encIV = genRand(getEncInfo().IVSize);
         Debugging::pu8Vec(encIV, 8, true, "IV");
-        auto enc = getEncInfo().algo({getClientWriteKey(), encIV, dataWithHash});
+        auto enc = getEncInfo().encFn({getClientWriteKey(), encIV, dataWithHash});
         Debugging::pu8Vec(enc, 8, true, "dataWithHash(encrypted)");
         std::vector<uint8_t> encryptedPacket;
         encryptedPacket.reserve(getEncInfo().IVSize + enc.size());
@@ -384,10 +383,44 @@ public:
 
     std::optional<TLSPlaintext> TLS_writeAppData(const std::vector<uint8_t>& data)
     {
-        if (m_state_ != TLS_State_::HandshakeFinished) return std::nullopt;
+        if (m_state_ != TLS_State_::ClientFinished_) return std::nullopt;
         TLSPlaintext packet {data, ContentType::Application, m_vsn};
         packet.realCont = encPlainText(packet);
         return {packet};
+    }
+
+    bool TLS_parseServerFinished(const TLSPlaintext& packet)
+    {
+        // TODO
+        using namespace std::string_literals;
+        if (m_state_ != TLS_State_::ClientFinished_) return false;
+        if (packet.contTyp != ContentType::Handshake) throw TLS_Alert(TLS_AlertCode::UnexpectedMessage, true);
+        // if (packet.realCont.size() != 12) throw TLS_Alert(TLS_AlertCode::DecodeError, true);
+        return true;
+        // return TLS_PRF(m_masterSecret, "server finished"s, SHA256::calculate(m_handshakeMessages),
+            // 12, getCSMACInfo().algo) == packet.realCont;
+    }
+
+    // decryption process should be encapsulated into a separate function, maybe "decPlainText"
+    std::vector<uint8_t> TLS_parseAppData(const TLSPlaintext& packet)
+    {
+        if (m_state_ != TLS_State_::ClientFinished_) throw std::runtime_error("Not in ClientFinished_ state");
+        if (packet.contTyp != ContentType::Application) throw std::runtime_error("Not an Application packet");
+        if (packet.recordVersion != m_vsn) throw TLS_Alert(TLS_AlertCode::ProtocolVersion, true);
+        std::vector<uint8_t> decIV = {packet.realCont.begin(), packet.realCont.begin() + getEncInfo().IVSize};
+        std::vector<uint8_t> decData = {packet.realCont.begin() + getEncInfo().IVSize, packet.realCont.end()};
+        auto dec = getEncInfo().decFn({getServerWriteKey(), decIV, decData});
+        if (dec.empty()) throw TLS_Alert(TLS_AlertCode::DecryptionFailed, true);
+        if (getEncInfo().blockSize > 0) {  // block cipher, unpad
+            uint8_t padVal = dec.back();
+            if (padVal >= dec.size())
+                throw TLS_Alert(TLS_AlertCode::DecryptError, true);
+            dec.resize(dec.size() - (padVal + 1));
+        }
+        // TODO: MAC
+        std::vector<uint8_t> mac = {dec.end() - getCSMACInfo().macKeyLength, dec.end()};
+        dec.resize(dec.size() - getCSMACInfo().macKeyLength);
+        return dec;
     }
 
     void writeKeyLog()

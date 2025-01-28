@@ -40,6 +40,13 @@ typedef struct {
 } symEncFnArgsType;
 typedef std::function<std::vector<uint8_t>(symEncFnArgsType)> symEncFnType;
 
+typedef struct {
+    const std::vector<uint8_t>& key;
+    const std::vector<uint8_t>& iv;
+    const std::vector<uint8_t>& encryptedData;
+} symDecFnArgsType;
+typedef std::function<std::vector<uint8_t>(symDecFnArgsType)> symDecFnType;
+
 enum class CompressionMethod : uint8_t {
     NULL_ = 0x00
 };
@@ -245,7 +252,9 @@ enum class TLS_State_ {
     ClientHelloDone,
     ServerHelloDone,
     KexDone,
-    HandshakeFinished,
+    ClientFinished_,
+    // TODO: parse server finished and server change cipher spec
+    ServerFinished_,
     Terminated,
     Error
 };

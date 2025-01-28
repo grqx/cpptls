@@ -157,7 +157,6 @@ int main() {
                     throw 666U;
             }
         }
-    
 
         auto kexPackets = tlss.TLS_writeClientKex();
         if (!kexPackets)
@@ -190,6 +189,42 @@ int main() {
                 return EXIT_FAILURE;
             }
             std::cout << "sent " << bytes << " bytes\n";
+
+            int bufferSize = 1024;
+            std::vector<uint8_t> leftOverResp;
+            std::vector<uint8_t> buf_;
+            while (1) {
+                buf_.resize(bufferSize);
+                bytes = recv(socket_, buf_.data(), buf_.size(), 0);
+                if (bytes <= 0) {
+                    std::cerr << "Failed to receive response or EOF\n";
+                    if (bytes < 0) {
+                        perror("recv");
+                        return EXIT_FAILURE;
+                    } else
+                        break;
+                }
+                buf_.resize(bytes);
+                std::cout << "received " << bytes << " bytes, accumulated " << leftOverResp.size() << " bytes\n";
+
+                if (leftOverResp.size()) {
+                    buf_.insert(buf_.begin(), leftOverResp.begin(), leftOverResp.end());
+                    leftOverResp.clear();
+                }
+                auto ret = TLS_parseRecordLayer(buf_);
+                if (ret.parsedBytes < bytes) {
+                    std::copy(buf_.begin() + ret.parsedBytes, buf_.end(), std::back_inserter(leftOverResp));
+                }
+                printParsedRecLayer(ret);
+
+                for (auto&& pkt : ret.parsedContent) {
+                    TLS_AlertError::throwOnAlertPacket(pkt, true);
+                    if (pkt.contTyp == ContentType::Application) {
+                        auto res = tlss.TLS_parseAppData(pkt);
+                        Debugging::pu8Vec(res, 8, true, "AppData");
+                    }
+                }
+            }
             std::this_thread::sleep_for(std::chrono::seconds(2));  // wait for server to respond
         }
         {
@@ -211,7 +246,7 @@ int main() {
         }
 
     }
-    if (!hasNetworkConn) return EXIT_FAILURE;
+    if (!hasNetworkConn||true) return EXIT_FAILURE;
 
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     unique_ptr_with_deleter<int> sock_ptr {&sock, [](int *s) {::close(*s);}};
