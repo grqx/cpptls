@@ -10,6 +10,11 @@
 
 #include "endian_utils.h"
 
+namespace CipherSpecChangedFlag {
+constexpr uint8_t clientChanged = 0x01;
+constexpr uint8_t serverChanged = 0x02;
+};  // namespace CipherSpecChangedFlag
+
 enum class TLS_Version : uint16_t {
     TLS_1_2 = 0x0303,
     TLS_1_3 = 0x0304,

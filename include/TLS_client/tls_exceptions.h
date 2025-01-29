@@ -8,8 +8,7 @@
 // base class for various tls errors
 class TLS_BaseError : public std::runtime_error {
 public:
-    template <typename ...Args>
-    TLS_BaseError(Args&& ...args) : runtime_error(std::forward<decltype(args)...>(args...)) {}
+    TLS_BaseError(const std::string& s = "TLS error") : runtime_error(s) {}
     virtual std::optional<TLS_Alert> toAlert() const noexcept
     {
         return std::nullopt;
@@ -62,6 +61,17 @@ public:
     {
         auto alert = fromPacket(content, throwWarning);
         if (alert) throw *alert;
+    }
+};
+
+class TLS_NotImplemented : public TLS_BaseError {
+public:
+    template <typename ...Args>
+    TLS_NotImplemented(Args&& ...args) : TLS_BaseError(std::forward<decltype(args)...>(args...)) {}
+    TLS_NotImplemented() : TLS_BaseError() {}
+    std::optional<TLS_Alert> toAlert() const noexcept override
+    {
+        return TLS_Alert(TLS_AlertCode::InternalError, TLS_AlertLevel::Fatal);
     }
 };
 

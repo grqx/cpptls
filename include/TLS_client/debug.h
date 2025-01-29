@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <iostream>
 #include <stdexcept>
+#include <functional>
+#include <string>
 #include "macros.h"
 
 namespace Debugging{
@@ -122,6 +124,23 @@ std::string readTilEOF(std::istream& f = std::cin) {
         s += ln;
     }
     return s;
+}
+
+void bruteForceStrings(const std::function<void(const std::string&)>& callback, const size_t maxLength = 15, const char min_ = '\0', const char max_ = 0xFF) {
+    for (size_t length = 1; length <= maxLength; ++length) {
+        std::string current(length, min_);
+        while (1) {
+            callback(current);
+            if (current == std::string(length, max_))
+                break;
+            size_t i = length - 1;  // max index
+            while (i < length && current[i] == max_) {  // reset
+                current[i] = min_;
+                if (--i == 0) break;
+            }
+            ++current[i];
+        }
+    }
 }
 };
 

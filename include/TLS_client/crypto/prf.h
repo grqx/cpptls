@@ -30,7 +30,15 @@
  * output data.
  */
 std::vector<uint8_t> TLS_P_hash(const std::vector<uint8_t>& secret, const std::vector<uint8_t>& seed, int len, HMAC_hashFnType HMAC_hashFn) {
-    HMAC_hashFn = hmac_sha256;  // temporary override, this disregards the HMAC_hashFn passed
+    /*
+     * In this section, we define one PRF, based on HMAC.  This PRF with the
+     * SHA-256 hash function is used for all cipher suites defined in this
+     * document and in TLS documents published prior to this document when
+     * TLS 1.2 is negotiated.  New cipher suites MUST explicitly specify a
+     * PRF and, in general, SHOULD use the TLS PRF with SHA-256 or a
+     * stronger standard hash function.
+     */
+    HMAC_hashFn = hmac_sha256;
     std::vector<uint8_t> ret;
     // A(0) = seed, A(i) = HMAC_hash(secret, A(i-1))
     std::vector<std::vector<uint8_t>> vecOfVecs_A(1, seed);

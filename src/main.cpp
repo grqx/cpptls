@@ -76,7 +76,9 @@ int main() {
         };
         pRecLayer(res);
         auto printParsedRecLayer = [](auto&& parsedRecLayer) {
-            std::cout << "bytes parsed: " << parsedRecLayer.parsedBytes << "\nparsedContent: {\n";
+            std::cout << "bytes parsed: " << parsedRecLayer.parsedBytes << '\n';
+            if (!parsedRecLayer.parsedBytes) return;
+            std::cout << "parsedContent: {\n";
             int i_ = 0;
             for (auto&& cont : parsedRecLayer.parsedContent) {
                 std::cout << "content entry " << i_++ << " of type " << static_cast<int>(cont.contTyp)
@@ -180,6 +182,42 @@ int main() {
             }
             std::cout << "sent " << allKexPackets.size() << " bytes\n";
 
+            {
+                int bufferSize = 1024;
+                std::vector<uint8_t> leftOverResp;
+                std::vector<uint8_t> buf_;
+                while (tlss.getState() != TLS_State_::ServerFinished_) {
+                    buf_.resize(bufferSize);
+                    auto bytes = recv(socket_, buf_.data(), buf_.size(), 0);
+                    if (bytes <= 0) {
+                        std::cerr << "Failed to receive response or EOF\n";
+                        if (bytes < 0) {
+                            perror("recv");
+                            return EXIT_FAILURE;
+                        }
+                        std::cerr << "EOF\n";
+                        break;
+                    }
+                    buf_.resize(bytes);
+                    std::cout << "received " << bytes << " bytes, accumulated " << leftOverResp.size() << " bytes\n";
+
+                    if (leftOverResp.size()) {
+                        buf_.insert(buf_.begin(), leftOverResp.begin(), leftOverResp.end());
+                        leftOverResp.clear();
+                    }
+                    auto ret = TLS_parseRecordLayer(buf_);
+                    if (ret.parsedBytes < bytes) {
+                        std::copy(buf_.begin() + ret.parsedBytes, buf_.end(), std::back_inserter(leftOverResp));
+                    }
+                    printParsedRecLayer(ret);
+
+                    for (auto&& pkt : ret.parsedContent) {
+                        TLS_AlertError::throwOnAlertPacket(pkt, true);
+                        tlss.TLS_parseServerFinished(pkt);
+                    }
+                }
+            }
+
             auto reqPacket = TLS_composeRecordLayer(*tlss.TLS_writeAppData(Debugging::forceU8ViseArr(std::string_view{request})));
             pRecLayer(reqPacket);
             auto bytes = send(socket_, reqPacket.begin()->data(), reqPacket.begin()->size(), 0);
@@ -189,43 +227,46 @@ int main() {
                 return EXIT_FAILURE;
             }
             std::cout << "sent " << bytes << " bytes\n";
-
-            int bufferSize = 1024;
-            std::vector<uint8_t> leftOverResp;
-            std::vector<uint8_t> buf_;
-            while (1) {
-                buf_.resize(bufferSize);
-                bytes = recv(socket_, buf_.data(), buf_.size(), 0);
-                if (bytes <= 0) {
-                    std::cerr << "Failed to receive response or EOF\n";
-                    if (bytes < 0) {
-                        perror("recv");
-                        return EXIT_FAILURE;
-                    } else
+        
+            {
+                int bufferSize = 1024;
+                std::vector<uint8_t> leftOverResp;
+                std::vector<uint8_t> buf_;
+                while (1) {
+                    buf_.resize(bufferSize);
+                    auto bytes_ = recv(socket_, buf_.data(), buf_.size(), 0);
+                    if (bytes_ <= 0) {
+                        if (bytes_ < 0) {
+                            std::cerr << "Failed to receive response\n";
+                            perror("recv");
+                            return EXIT_FAILURE;
+                        }
+                        std::cerr << "EOF\n";
                         break;
-                }
-                buf_.resize(bytes);
-                std::cout << "received " << bytes << " bytes, accumulated " << leftOverResp.size() << " bytes\n";
+                    }
+                    buf_.resize(bytes_);
+                    std::cout << "received " << bytes_ << " bytes, accumulated " << leftOverResp.size() << " bytes\n";
 
-                if (leftOverResp.size()) {
-                    buf_.insert(buf_.begin(), leftOverResp.begin(), leftOverResp.end());
-                    leftOverResp.clear();
-                }
-                auto ret = TLS_parseRecordLayer(buf_);
-                if (ret.parsedBytes < bytes) {
-                    std::copy(buf_.begin() + ret.parsedBytes, buf_.end(), std::back_inserter(leftOverResp));
-                }
-                printParsedRecLayer(ret);
+                    if (leftOverResp.size()) {
+                        buf_.insert(buf_.begin(), leftOverResp.begin(), leftOverResp.end());
+                        leftOverResp.clear();
+                    }
+                    auto ret = TLS_parseRecordLayer(buf_);
+                    if (ret.parsedBytes < bytes_) {
+                        std::copy(buf_.begin() + ret.parsedBytes, buf_.end(), std::back_inserter(leftOverResp));
+                    }
+                    printParsedRecLayer(ret);
 
-                for (auto&& pkt : ret.parsedContent) {
-                    TLS_AlertError::throwOnAlertPacket(pkt, true);
-                    if (pkt.contTyp == ContentType::Application) {
-                        auto res = tlss.TLS_parseAppData(pkt);
-                        Debugging::pu8Vec(res, 8, true, "AppData");
+                    for (auto&& pkt : ret.parsedContent) {
+                        TLS_AlertError::throwOnAlertPacket(pkt, true);
+                        if (pkt.contTyp == ContentType::Application) {
+                            auto res = tlss.TLS_parseAppData(pkt);
+                            Debugging::pu8Vec(res, 8, true, "AppData");
+                            std::cout << "Decoded AppData: " << std::string{res.begin(), res.end()} << '\n';
+                        }
                     }
                 }
             }
-            std::this_thread::sleep_for(std::chrono::seconds(2));  // wait for server to respond
         }
         {
             Debugging::pu8Vec(Debugging::forceU8Vise(to_big_endian(tlss.m_state_)), 8, true, "tls session state");

@@ -127,10 +127,13 @@ private:
     std::optional<CompressionMethod> m_selectedCompressionMethod;
     TLS_Version m_vsn;
     TLS_State_ m_state_ = TLS_State_::Created;
-    uint64_t seqNum = 0;
+    uint64_t m_seqNum = 0;
+    // flag: whether client/server has changed cipher suite
+    uint8_t m_cSChanged = 0;
 
 public:
     friend int ::main();
+    const TLS_State_& getState() const noexcept { return m_state_; }
 
     void TLS_setCipherSuites(const std::list<CipherSuite>& css)
     {
@@ -251,7 +254,7 @@ public:
             uint8_t sidLen = hs->m_cont[parsed];
             parsed++;
             if (parsed + sidLen > csize) throw TLS_Alert(TLS_AlertCode::DecodeError, true);  // unexpected end-of-packet
-            // aborted here
+
             m_sessionID.clear();
             std::copy(hs->m_cont.begin() + parsed, hs->m_cont.begin() + parsed + sidLen, std::back_inserter(m_sessionID));
             parsed += sidLen;
@@ -282,7 +285,6 @@ public:
             std::vector<uint8_t> certs{hs->m_cont.begin() + parsed, hs->m_cont.begin() + parsed + certSize};
             parsed += certSize;
 
-            std::cout << "calling chatgpts code\n";
             m_serverPubKey = ChatGPT4o::getPubKey(certs);
         } else
             return false;
@@ -319,6 +321,7 @@ public:
         std::copy(ckxPacket.realCont.begin(), ckxPacket.realCont.end(), std::back_inserter(m_handshakeMessages));
 
         m_state_ = TLS_State_::KexDone;
+        m_cSChanged |= CipherSpecChangedFlag::clientChanged;
         auto finishedPacket = TLS_writeFinished();
         if (!finishedPacket) return std::nullopt;
         return {{ckxPacket, {{0x01}, ContentType::ChangeCipherSpec, m_vsn}, *finishedPacket}};
@@ -330,6 +333,12 @@ public:
         if (m_state_ != TLS_State_::KexDone) return std::nullopt;
         // PRF(master_secret, finished_label, Hash(handshake_messages))
         //     [0..verify_data_length-1];
+        /*
+         * Hash denotes a Hash of the handshake messages.  For the PRF
+         * defined in Section 5, the Hash MUST be the Hash used as the basis
+         * for the PRF.  Any cipher suite which defines a different PRF MUST
+         * also define the Hash to use in the Finished computation.
+         */
         auto verifyData = TLS_PRF(m_masterSecret, "client finished"s, SHA256::calculate(m_handshakeMessages),
             12, getCSMACInfo().algo);
         Debugging::pu8Vec(verifyData, 8, true, "verifyData");
@@ -344,9 +353,11 @@ public:
 
     std::vector<uint8_t> encPlainText(const TLSPlaintext& tpt)
     {
+        if (!(m_cSChanged & CipherSpecChangedFlag::clientChanged))
+            throw std::runtime_error("Client hasn't sent change cipher spec but requested encryption");
         std::vector<uint8_t> dataToHash;
         dataToHash.reserve(13 + tpt.realCont.size());
-        stdcopy_to_big_endian(seqNum++, std::back_inserter(dataToHash));
+        stdcopy_to_big_endian(m_seqNum++, std::back_inserter(dataToHash));
         dataToHash.push_back(static_cast<uint8_t>(tpt.contTyp));
         stdcopy_to_big_endian(m_vsn, std::back_inserter(dataToHash), 2);
         stdcopy_to_big_endian(tpt.realCont.size(), std::back_inserter(dataToHash), 2);
@@ -383,29 +394,49 @@ public:
 
     std::optional<TLSPlaintext> TLS_writeAppData(const std::vector<uint8_t>& data)
     {
-        if (m_state_ != TLS_State_::ClientFinished_) return std::nullopt;
+        if (m_state_ != TLS_State_::ServerFinished_) return std::nullopt;
         TLSPlaintext packet {data, ContentType::Application, m_vsn};
         packet.realCont = encPlainText(packet);
         return {packet};
     }
 
-    bool TLS_parseServerFinished(const TLSPlaintext& packet)
+    // parse server finished and server change cipher spec
+    void TLS_parseServerFinished(const TLSPlaintext& packet)
     {
-        // TODO
-        using namespace std::string_literals;
-        if (m_state_ != TLS_State_::ClientFinished_) return false;
-        if (packet.contTyp != ContentType::Handshake) throw TLS_Alert(TLS_AlertCode::UnexpectedMessage, true);
-        // if (packet.realCont.size() != 12) throw TLS_Alert(TLS_AlertCode::DecodeError, true);
-        return true;
-        // return TLS_PRF(m_masterSecret, "server finished"s, SHA256::calculate(m_handshakeMessages),
-            // 12, getCSMACInfo().algo) == packet.realCont;
+        if (m_state_ != TLS_State_::ClientFinished_) throw std::runtime_error("wrong state: expected ClientFinished_");
+        if (packet.recordVersion != m_vsn) throw TLS_Alert(TLS_AlertCode::ProtocolVersion, true);
+        int parsed = 0;
+        if (packet.contTyp == ContentType::Handshake) {
+            using namespace std::string_literals;
+            auto packet_ = packet;
+            packet_.realCont = decPlainText(packet);
+            auto hs = TLS_Handshake::parse(packet_, true);
+            if (hs->m_ht != HandshakeType::Finished) throw TLS_Alert(TLS_AlertCode::UnexpectedMessage, true);
+            auto expected = TLS_PRF(m_masterSecret, "server finished"s, SHA256::calculate(m_handshakeMessages),
+                12, getCSMACInfo().algo);
+            Debugging::pu8Vec(expected, 8, true, "expected server finished");
+            Debugging::pu8Vec(hs->m_cont, 8, true, "got server finished");
+            auto s = expected == hs->m_cont;
+            std::cout << (s ? "true" : "false") << '\n';
+            // FIXME
+            // if (!s) throw TLS_Alert(TLS_AlertCode::HandshakeFailure, true);
+            parsed = packet.realCont.size();
+            m_state_ = TLS_State_::ServerFinished_;
+        } else if (packet.contTyp == ContentType::ChangeCipherSpec) {
+            if (packet.realCont.size() != 1) throw TLS_Alert(TLS_AlertCode::DecodeError, true);
+            if (packet.realCont.front() != 0x01) throw TLS_Alert(TLS_AlertCode::DecodeError, true);
+            parsed++;
+            m_cSChanged |= CipherSpecChangedFlag::serverChanged;
+        } else
+            throw TLS_Alert(TLS_AlertCode::UnexpectedMessage, true);
+        if (packet.realCont.size() > parsed) throw TLS_Alert(TLS_AlertCode::DecodeError, true);
     }
 
-    // decryption process should be encapsulated into a separate function, maybe "decPlainText"
-    std::vector<uint8_t> TLS_parseAppData(const TLSPlaintext& packet)
+    std::vector<uint8_t> decPlainText(const TLSPlaintext& packet)
     {
-        if (m_state_ != TLS_State_::ClientFinished_) throw std::runtime_error("Not in ClientFinished_ state");
-        if (packet.contTyp != ContentType::Application) throw std::runtime_error("Not an Application packet");
+        if (m_state_ != TLS_State_::ServerFinished_ && m_state_ != TLS_State_::ClientFinished_)
+            throw std::runtime_error("Not in ServerFinished_/ClientFinished_ state");
+        if (!(m_cSChanged & CipherSpecChangedFlag::serverChanged)) throw TLS_Alert(TLS_AlertCode::UnexpectedMessage, true);
         if (packet.recordVersion != m_vsn) throw TLS_Alert(TLS_AlertCode::ProtocolVersion, true);
         std::vector<uint8_t> decIV = {packet.realCont.begin(), packet.realCont.begin() + getEncInfo().IVSize};
         std::vector<uint8_t> decData = {packet.realCont.begin() + getEncInfo().IVSize, packet.realCont.end()};
@@ -421,6 +452,13 @@ public:
         std::vector<uint8_t> mac = {dec.end() - getCSMACInfo().macKeyLength, dec.end()};
         dec.resize(dec.size() - getCSMACInfo().macKeyLength);
         return dec;
+    }
+
+    std::vector<uint8_t> TLS_parseAppData(const TLSPlaintext& packet)
+    {
+        if (packet.contTyp != ContentType::Application) throw std::runtime_error("Not an Application packet");
+        if (m_state_ != TLS_State_::ServerFinished_) throw std::runtime_error("Not in ServerFinished_ state");
+        return decPlainText(packet);
     }
 
     void writeKeyLog()

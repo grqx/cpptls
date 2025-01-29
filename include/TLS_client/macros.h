@@ -33,6 +33,14 @@
     #define UNREACHABLE
 #endif
 
+#if defined(__cpp_lib_to_underlying) && __cpp_lib_to_underlying >= 	202102L
+#include <utility>
+#define UNDERLYING(ENUM_VAL) std::to_underlying(ENUM_VAL)
+#else
+#include <type_traits>
+#define UNDERLYING(ENUM_VAL) static_cast<std::underlying_type_t<decltype(ENUM_VAL)>>(ENUM_VAL)
+#endif
+
 #define NAMEOF(...) #__VA_ARGS__
 
 #endif
