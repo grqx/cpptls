@@ -227,7 +227,7 @@ int main() {
                 return EXIT_FAILURE;
             }
             std::cout << "sent " << bytes << " bytes\n";
-        
+
             {
                 int bufferSize = 1024;
                 std::vector<uint8_t> leftOverResp;
