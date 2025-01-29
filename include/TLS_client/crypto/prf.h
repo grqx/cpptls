@@ -1,12 +1,12 @@
 #ifndef TLS_CLIENT_CRYPTO_PRF_H
 #define TLS_CLIENT_CRYPTO_PRF_H
 
+#include <TLS_client/crypto/hmac_fns.h>
+#include <TLS_client/tls_types.h>
 #include <cstdint>
 #include <vector>
-#include <TLS_client/tls_types.h>
-#include <TLS_client/crypto/hmac_fns.h>
 
-/* 
+/*
  * First, we define a data expansion function, P_hash(secret, data),
  * that uses a single hash function to expand a secret and seed into an
  * arbitrary quantity of output:
@@ -29,28 +29,30 @@
  * of the final iteration will then be discarded, leaving 80 bytes of
  * output data.
  */
-std::vector<uint8_t> TLS_P_hash(const std::vector<uint8_t>& secret, const std::vector<uint8_t>& seed, int len, HMAC_hashFnType HMAC_hashFn) {
-    /*
-     * In this section, we define one PRF, based on HMAC.  This PRF with the
-     * SHA-256 hash function is used for all cipher suites defined in this
-     * document and in TLS documents published prior to this document when
-     * TLS 1.2 is negotiated.  New cipher suites MUST explicitly specify a
-     * PRF and, in general, SHOULD use the TLS PRF with SHA-256 or a
-     * stronger standard hash function.
-     */
-    HMAC_hashFn = hmac_sha256;
-    std::vector<uint8_t> ret;
-    // A(0) = seed, A(i) = HMAC_hash(secret, A(i-1))
-    std::vector<std::vector<uint8_t>> vecOfVecs_A(1, seed);
-    while (ret.size() < len) {
-        vecOfVecs_A.push_back(HMAC_hashFn({secret, vecOfVecs_A.back()}));
-        std::vector<uint8_t> concatd = vecOfVecs_A.back();  // A.back() + seed
-        concatd.insert(concatd.end(), seed.begin(), seed.end());
-        auto hmac_ = HMAC_hashFn({secret, concatd});
-        ret.insert(ret.end(), hmac_.begin(), hmac_.end());
-    }
-    ret.resize(len);
-    return ret;
+std::vector<uint8_t> TLS_P_hash(const std::vector<uint8_t> &secret,
+                                const std::vector<uint8_t> &seed, int len,
+                                HMAC_hashFnType HMAC_hashFn) {
+  /*
+   * In this section, we define one PRF, based on HMAC.  This PRF with the
+   * SHA-256 hash function is used for all cipher suites defined in this
+   * document and in TLS documents published prior to this document when
+   * TLS 1.2 is negotiated.  New cipher suites MUST explicitly specify a
+   * PRF and, in general, SHOULD use the TLS PRF with SHA-256 or a
+   * stronger standard hash function.
+   */
+  HMAC_hashFn = hmac_sha256;
+  std::vector<uint8_t> ret;
+  // A(0) = seed, A(i) = HMAC_hash(secret, A(i-1))
+  std::vector<std::vector<uint8_t>> vecOfVecs_A(1, seed);
+  while (ret.size() < len) {
+    vecOfVecs_A.push_back(HMAC_hashFn({secret, vecOfVecs_A.back()}));
+    std::vector<uint8_t> concatd = vecOfVecs_A.back(); // A.back() + seed
+    concatd.insert(concatd.end(), seed.begin(), seed.end());
+    auto hmac_ = HMAC_hashFn({secret, concatd});
+    ret.insert(ret.end(), hmac_.begin(), hmac_.end());
+  }
+  ret.resize(len);
+  return ret;
 }
 
 /*
@@ -67,14 +69,17 @@ std::vector<uint8_t> TLS_P_hash(const std::vector<uint8_t>& secret, const std::v
  *
  *   73 6C 69 74 68 79 20 74 6F 76 65 73
  */
-std::vector<uint8_t> TLS_PRF(const std::vector<uint8_t>& secret, std::string label, const std::vector<uint8_t>& seed, int len, HMAC_hashFnType HMAC_hashFn) {
-    std::vector<uint8_t> realSeed;
-    realSeed.reserve(label.size() + seed.size());
-    std::copy(label.begin(), label.end(), std::back_inserter(realSeed));
-    std::copy(seed.begin(), seed.end(), std::back_inserter(realSeed));
-    std::vector<uint8_t> ret = TLS_P_hash(secret, realSeed, len, HMAC_hashFn);
-    ret.resize(len);
-    return ret;
+std::vector<uint8_t> TLS_PRF(const std::vector<uint8_t> &secret,
+                             std::string label,
+                             const std::vector<uint8_t> &seed, int len,
+                             HMAC_hashFnType HMAC_hashFn) {
+  std::vector<uint8_t> realSeed;
+  realSeed.reserve(label.size() + seed.size());
+  std::copy(label.begin(), label.end(), std::back_inserter(realSeed));
+  std::copy(seed.begin(), seed.end(), std::back_inserter(realSeed));
+  std::vector<uint8_t> ret = TLS_P_hash(secret, realSeed, len, HMAC_hashFn);
+  ret.resize(len);
+  return ret;
 }
 
 #endif
