@@ -362,7 +362,7 @@ class TLS_Session
             concatdRandoms.insert(concatdRandoms.end(), m_serverRandom.begin(),
                                   m_serverRandom.end());
             m_masterSecret = TLS_PRF(m_preMasterSecret, "master secret"s, concatdRandoms, 48,
-                                     decideHMACAlgo(*m_selectedCipherSuite));
+                                     getCSMACInfo().algo);
         }
         writeKeyLog();
         auto ckxPacket = ckx.toPacket(m_vsn);

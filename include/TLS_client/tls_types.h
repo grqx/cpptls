@@ -34,6 +34,9 @@ typedef struct {
 // returns the HMAC hash
 typedef std::function<std::vector<uint8_t>(HMAC_hashFnArgsType)> HMAC_hashFnType;
 
+
+typedef std::function<std::vector<uint8_t>(std::vector<uint8_t>)> HashFunctionType;
+
 typedef struct {
     const std::vector<uint8_t> &key;
     const std::vector<uint8_t> &iv;

@@ -10,9 +10,7 @@ typedef struct {
     int macKeyLength;
 } MACInfo;
 MACInfo getMACInfo(const CipherSuite &cs);
-DEPRECATION_START
+HMAC_hashFnType makeHMACHashFn(const HashFunctionType& hashFn, size_t blockSize);
 std::vector<uint8_t> hmac_sha256(HMAC_hashFnArgsType args);
-HMAC_hashFnType decideHMACAlgo(const CipherSuite &cs);
-DEPRECATION_END
 
 #endif

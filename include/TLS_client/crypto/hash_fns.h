@@ -7,7 +7,7 @@
 #include <vector>
 
 namespace ChatGPT4o {
-std::vector<uint8_t> TLS_sha1(const std::vector<uint8_t> &data)
+inline std::vector<uint8_t> TLS_sha1(const std::vector<uint8_t> &data)
 {
     // Constants for SHA-1
     constexpr std::array<uint32_t, 5> h0 = {0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476,
