@@ -5,9 +5,9 @@
 #include <TLS_client/tls_types.h>
 
 typedef struct {
-  HMAC_hashFnType algo;
-  int macLength;
-  int macKeyLength;
+    HMAC_hashFnType algo;
+    int macLength;
+    int macKeyLength;
 } MACInfo;
 MACInfo getMACInfo(const CipherSuite &cs);
 DEPRECATION_START
