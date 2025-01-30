@@ -2,4 +2,4 @@
 build/
 r.hex
 *.swp
-
+**/a.out
