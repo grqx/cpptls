@@ -403,8 +403,7 @@ class TLS_Session
         dataToHash.insert(dataToHash.end(), tpt.realCont.begin(), tpt.realCont.end());
         Debugging::pu8Vec(dataToHash, 8, true, "data to hash");
 
-        auto hash_ = hmac(getClientWriteMACKey(), dataToHash, getCSInfo().mi.MACHashInfo.hashFn,
-                          getCSInfo().mi.MACHashInfo.blockSizeBytes);
+        auto hash_ = hmac(getClientWriteMACKey(), dataToHash, getCSInfo().mi.MACHashInfo);
         Debugging::pu8Vec(hash_, 8, true, "hash in data");
 
         auto dataWithHash = tpt.realCont;

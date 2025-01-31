@@ -46,10 +46,10 @@ std::vector<uint8_t> TLS_P_hash(const std::vector<uint8_t> &secret,
     // A(0) = seed, A(i) = HMAC_hash(secret, A(i-1))
     std::vector<std::vector<uint8_t>> vecOfVecs_A(1, seed);
     while (ret.size() < len) {
-        vecOfVecs_A.push_back(hmac(secret, vecOfVecs_A.back(), PRFhi.hashFn, PRFhi.blockSizeBytes));
+        vecOfVecs_A.push_back(hmac(secret, vecOfVecs_A.back(), PRFhi));
         std::vector<uint8_t> concatd = vecOfVecs_A.back();  // A.back() + seed
         concatd.insert(concatd.end(), seed.begin(), seed.end());
-        auto hmac_ = hmac(secret, concatd, PRFhi.hashFn, PRFhi.blockSizeBytes);
+        auto hmac_ = hmac(secret, concatd, PRFhi);
         ret.insert(ret.end(), hmac_.begin(), hmac_.end());
     }
     ret.resize(len);

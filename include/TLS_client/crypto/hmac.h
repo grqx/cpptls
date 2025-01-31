@@ -16,13 +16,13 @@ struct HMAC_hashFnArgsType {
 typedef std::vector<uint8_t> (*HMAC_hashFnType)(HMAC_hashFnArgsType);
 
 std::vector<uint8_t> hmac(const std::vector<uint8_t>& key, const std::vector<uint8_t>& message,
-                          const HashFnType& hash_, size_t block_size);
+                          const HashInfo&);
 
 template <typename HashAlgoType>
 IMMEDIATE_EVAL_FN HMAC_hashFnType makeHMACHashFn()
 {
     return [](HMAC_hashFnArgsType args) {
-        return hmac(args.secret, args.msg, HashAlgoType::calculate, HashAlgoType::BlockSize);
+        return hmac(args.secret, args.msg, {HashAlgoType::calculate, HashAlgoType::BlockSize});
     };
 }
 
