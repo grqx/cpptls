@@ -9,7 +9,22 @@
 #include <cstdint>
 #include <vector>
 
+struct symEncFnArgsType {
+    const std::vector<uint8_t> &key;
+    const std::vector<uint8_t> &iv;
+    const std::vector<uint8_t> &data;
+};
+typedef std::vector<uint8_t> (*symEncFnType)(symEncFnArgsType args);
+
+struct symDecFnArgsType {
+    const std::vector<uint8_t> &key;
+    const std::vector<uint8_t> &iv;
+    const std::vector<uint8_t> &encryptedData;
+};
+typedef std::vector<uint8_t> (*symDecFnType)(symDecFnArgsType args);
+
 namespace ChatGPT4o {
+inline
 std::vector<uint8_t> encryptAES_128_CBC(symEncFnArgsType args)
 {
     if (args.key.size() != 16) {
@@ -67,6 +82,7 @@ std::vector<uint8_t> encryptAES_128_CBC(symEncFnArgsType args)
     return ciphertext;
 }
 
+inline
 std::vector<uint8_t> decryptAES_128_CBC(symDecFnArgsType args)
 {
     if (args.key.size() != 16) {
@@ -95,7 +111,6 @@ std::vector<uint8_t> decryptAES_128_CBC(symDecFnArgsType args)
         throw std::runtime_error("EVP_DecryptInit_ex failed");
     }
 
-    // Enable padding (optional, enabled by default in OpenSSL)
     if (EVP_CIPHER_CTX_set_padding(ctx.get(), 0) != 1) {
         throw std::runtime_error("EVP_CIPHER_CTX_set_padding failed");
     }
@@ -126,20 +141,13 @@ std::vector<uint8_t> decryptAES_128_CBC(symDecFnArgsType args)
 }
 };  // namespace ChatGPT4o
 
-typedef struct {
+struct CipherInfo {
     symEncFnType encFn;
     symDecFnType decFn;
     int keyMaterial;
     int IVSize;
     // -1 for stream ciphers
     int blockSize;
-} CipherInfo;
-
-CipherInfo getCipherInfo(const CipherSuite &cs)
-{
-    if (cs == CipherSuite::TLS_RSA_WITH_AES_128_CBC_SHA)  // AES_128_CBC
-        return {ChatGPT4o::encryptAES_128_CBC, ChatGPT4o::decryptAES_128_CBC, 16, 16, 16};
-    UNREACHABLE;
-}
+};
 
 #endif

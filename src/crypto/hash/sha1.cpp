@@ -1,24 +1,20 @@
-#ifndef TLS_CLIENT_CRYPTO_HASH_FNS_H
-#define TLS_CLIENT_CRYPTO_HASH_FNS_H
-
+#include <TLS_client/crypto/hash/sha1.h>
 #include <array>
-#include <cstdint>
-#include <cstring>  // for std::memcpy
-#include <vector>
+#include <cstring>
 
-namespace ChatGPT4o {
-inline std::vector<uint8_t> TLS_sha1(const std::vector<uint8_t> &data)
+std::vector<uint8_t> SHA1_calculate(const std::vector<uint8_t> &data)
 {
     // Constants for SHA-1
     constexpr std::array<uint32_t, 5> h0 = {0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476,
                                             0xC3D2E1F0};
+    constexpr size_t blockSize = 64;
 
     // Pre-processing
     size_t original_size = data.size();
     size_t bit_length = original_size * 8;
 
     // Calculate padding
-    size_t padded_size = ((original_size + 8) / 64 + 1) * 64;
+    size_t padded_size = ((original_size + 8) / blockSize + 1) * blockSize;
     std::vector<uint8_t> padded_data(padded_size, 0);
 
     // Copy original data
@@ -36,7 +32,7 @@ inline std::vector<uint8_t> TLS_sha1(const std::vector<uint8_t> &data)
     std::array<uint32_t, 5> h = h0;
 
     // Process the message in successive 512-bit chunks
-    for (size_t chunk_start = 0; chunk_start < padded_size; chunk_start += 64) {
+    for (size_t chunk_start = 0; chunk_start < padded_size; chunk_start += blockSize) {
         uint32_t w[80] = {0};
 
         // Break chunk into sixteen 32-bit big-endian words
@@ -105,6 +101,3 @@ inline std::vector<uint8_t> TLS_sha1(const std::vector<uint8_t> &data)
 
     return hash;
 }
-};  // namespace ChatGPT4o
-
-#endif

@@ -36,6 +36,15 @@
 #define UNDERLYING(ENUM_VAL) static_cast<std::underlying_type_t<decltype(ENUM_VAL)>>(ENUM_VAL)
 #endif
 
+#if defined(__cpp_consteval)
+    #define IMMEDIATE_EVAL_FN consteval
+#elif defined (__cpp_constexpr)
+    #define IMMEDIATE_EVAL_FN constexpr
+#else
+    #warning "Immediate functions not available"
+    #define IMMEDIATE_EVAL_FN inline
+#endif
+
 #define NAMEOF(...) #__VA_ARGS__
 
 #endif

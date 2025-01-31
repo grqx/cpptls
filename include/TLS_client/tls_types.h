@@ -25,31 +25,16 @@ enum class TLS_Version : uint16_t {
 //    length), a MAC algorithm, and a PRF
 enum class CipherSuite : uint16_t { TLS_RSA_WITH_AES_128_CBC_SHA = 0x002f };
 
-typedef struct {
+struct HMAC_hashFnArgsType {
     const std::vector<uint8_t> &secret;
     const std::vector<uint8_t> &msg;
-} HMAC_hashFnArgsType;
+};
 
 // HMAC hash function type
 // returns the HMAC hash
-typedef std::function<std::vector<uint8_t>(HMAC_hashFnArgsType)> HMAC_hashFnType;
+typedef std::vector<uint8_t> (*HMAC_hashFnType)(HMAC_hashFnArgsType);
 
-
-typedef std::function<std::vector<uint8_t>(std::vector<uint8_t>)> HashFunctionType;
-
-typedef struct {
-    const std::vector<uint8_t> &key;
-    const std::vector<uint8_t> &iv;
-    const std::vector<uint8_t> &data;
-} symEncFnArgsType;
-typedef std::function<std::vector<uint8_t>(symEncFnArgsType)> symEncFnType;
-
-typedef struct {
-    const std::vector<uint8_t> &key;
-    const std::vector<uint8_t> &iv;
-    const std::vector<uint8_t> &encryptedData;
-} symDecFnArgsType;
-typedef std::function<std::vector<uint8_t>(symDecFnArgsType)> symDecFnType;
+typedef std::vector<uint8_t> (*HashFnType)(const std::vector<uint8_t>&);
 
 enum class CompressionMethod : uint8_t { NULL_ = 0x00 };
 

@@ -13,10 +13,10 @@
 #include <sstream>
 #include <vector>
 
-#include "crypto/hash_fns.h"
+#include "crypto/cipher_suite.h"
 #include "crypto/hmac_fns.h"
 #include "crypto/prf.h"
-#include "crypto/sha256.h"
+#include "crypto/hash/sha256.h"
 #include "crypto/symEnc_fns.h"
 #include "debug.h"
 #include "endian_utils.h"
@@ -36,17 +36,11 @@ class TLS_Session
     std::vector<uint8_t> m_serverPubKey;
     std::vector<uint8_t> m_preMasterSecret;
     std::vector<uint8_t> m_masterSecret;
-    mutable std::optional<CipherInfo> m_encInfo;
-    const CipherInfo &getEncInfo() const noexcept
+    mutable std::optional<CipherSuiteInfo> m_csInfo;
+    const CipherSuiteInfo &getCSInfo() const noexcept
     {
-        if (!m_encInfo && m_selectedCipherSuite) m_encInfo = getCipherInfo(*m_selectedCipherSuite);
-        return *m_encInfo;
-    }
-    mutable std::optional<MACInfo> m_macInfo;
-    const MACInfo &getCSMACInfo() const noexcept
-    {
-        if (!m_macInfo && m_selectedCipherSuite) m_macInfo = getMACInfo(*m_selectedCipherSuite);
-        return *m_macInfo;
+        if (!m_csInfo) m_csInfo = getCipherSuiteInfo(*m_selectedCipherSuite);
+        return *m_csInfo;
     }
     mutable std::vector<uint8_t> m_keyBlock;
     const std::vector<uint8_t> &getKeyBlock() const noexcept
@@ -58,8 +52,8 @@ class TLS_Session
             // len was previously 104
             m_keyBlock = TLS_PRF(
                 m_masterSecret, "key expansion"s, concatd,
-                2 * (getCSMACInfo().macKeyLength + getEncInfo().keyMaterial + getEncInfo().IVSize),
-                getCSMACInfo().algo);
+                2 * (getCSInfo().mi.macKeyLength + getCSInfo().ci.keyMaterial + getCSInfo().ci.IVSize),
+                getCSInfo().PRFHashInfo);
             // key_block = PRF(SecurityParameters.master_secret, "key expansion",
             //     SecurityParameters.server_random +
             //     SecurityParameters.client_random);
@@ -71,7 +65,7 @@ class TLS_Session
     {
         if (m_clientWriteMACKey.empty() && !m_masterSecret.empty()) {
             const auto &kbb = getKeyBlock().begin();
-            m_clientWriteMACKey = {kbb, kbb + getCSMACInfo().macKeyLength};
+            m_clientWriteMACKey = {kbb, kbb + getCSInfo().mi.macKeyLength};
         }
         return m_clientWriteMACKey;
     }
@@ -80,8 +74,8 @@ class TLS_Session
     {
         if (m_serverWriteMACKey.empty() && !m_masterSecret.empty()) {
             const auto &kbb = getKeyBlock().begin();
-            m_serverWriteMACKey = {kbb + getCSMACInfo().macKeyLength,
-                                   kbb + 2 * getCSMACInfo().macKeyLength};
+            m_serverWriteMACKey = {kbb + getCSInfo().mi.macKeyLength,
+                                   kbb + 2 * getCSInfo().mi.macKeyLength};
         }
         return m_serverWriteMACKey;
     }
@@ -90,8 +84,8 @@ class TLS_Session
     {
         if (m_clientWriteKey.empty() && !m_masterSecret.empty()) {
             const auto &kbb = getKeyBlock().begin();
-            m_clientWriteKey = {kbb + 2 * getCSMACInfo().macKeyLength,
-                                kbb + 2 * getCSMACInfo().macKeyLength + getEncInfo().keyMaterial};
+            m_clientWriteKey = {kbb + 2 * getCSInfo().mi.macKeyLength,
+                                kbb + 2 * getCSInfo().mi.macKeyLength + getCSInfo().ci.keyMaterial};
         }
         return m_clientWriteKey;
     }
@@ -101,8 +95,8 @@ class TLS_Session
         if (m_serverWriteKey.empty() && !m_masterSecret.empty()) {
             const auto &kbb = getKeyBlock().begin();
             m_serverWriteKey = {
-                kbb + 2 * getCSMACInfo().macKeyLength + getEncInfo().keyMaterial,
-                kbb + 2 * getCSMACInfo().macKeyLength + 2 * getEncInfo().keyMaterial};
+                kbb + 2 * getCSInfo().mi.macKeyLength + getCSInfo().ci.keyMaterial,
+                kbb + 2 * getCSInfo().mi.macKeyLength + 2 * getCSInfo().ci.keyMaterial};
         }
         return m_serverWriteKey;
     }
@@ -111,9 +105,9 @@ class TLS_Session
     {
         if (m_clientWriteIV.empty() && !m_masterSecret.empty()) {
             const auto &kbb = getKeyBlock().begin();
-            m_clientWriteIV = {kbb + 2 * getCSMACInfo().macKeyLength + 2 * getEncInfo().keyMaterial,
-                               kbb + 2 * getCSMACInfo().macKeyLength +
-                                   2 * getEncInfo().keyMaterial + getEncInfo().IVSize};
+            m_clientWriteIV = {kbb + 2 * getCSInfo().mi.macKeyLength + 2 * getCSInfo().ci.keyMaterial,
+                               kbb + 2 * getCSInfo().mi.macKeyLength +
+                                   2 * getCSInfo().ci.keyMaterial + getCSInfo().ci.IVSize};
         }
         return m_clientWriteIV;
     }
@@ -122,10 +116,10 @@ class TLS_Session
     {
         if (m_serverWriteIV.empty() && !m_masterSecret.empty()) {
             const auto &kbb = getKeyBlock().begin();
-            m_serverWriteIV = {kbb + 2 * getCSMACInfo().macKeyLength +
-                                   2 * getEncInfo().keyMaterial + getEncInfo().IVSize,
-                               kbb + 2 * getCSMACInfo().macKeyLength +
-                                   2 * getEncInfo().keyMaterial + 2 * getEncInfo().IVSize};
+            m_serverWriteIV = {kbb + 2 * getCSInfo().mi.macKeyLength +
+                                   2 * getCSInfo().ci.keyMaterial + getCSInfo().ci.IVSize,
+                               kbb + 2 * getCSInfo().mi.macKeyLength +
+                                   2 * getCSInfo().ci.keyMaterial + 2 * getCSInfo().ci.IVSize};
         }
         return m_serverWriteIV;
     }
@@ -218,7 +212,7 @@ class TLS_Session
         if (cipherSuitesSize)
             std::copy(m_cipherSuites.begin(), m_cipherSuites.end(), std::back_inserter(vec));
 
-        // CipherSuites
+        // CompressionMethods
         auto compressionMethodsSize = m_compressionMethods.size();
         if (compressionMethodsSize > UINT8_MAX)
             throw std::overflow_error("Compression Methods length overflowed UINT8_MAX");
@@ -362,7 +356,7 @@ class TLS_Session
             concatdRandoms.insert(concatdRandoms.end(), m_serverRandom.begin(),
                                   m_serverRandom.end());
             m_masterSecret = TLS_PRF(m_preMasterSecret, "master secret"s, concatdRandoms, 48,
-                                     getCSMACInfo().algo);
+                                     getCSInfo().PRFHashInfo);
         }
         writeKeyLog();
         auto ckxPacket = ckx.toPacket(m_vsn);
@@ -389,7 +383,7 @@ class TLS_Session
          * also define the Hash to use in the Finished computation.
          */
         auto verifyData = TLS_PRF(m_masterSecret, "client finished"s,
-                                  SHA256::calculate(m_handshakeMessages), 12, getCSMACInfo().algo);
+                                  SHA256::calculate(m_handshakeMessages), getCSInfo().verifyDataLength, getCSInfo().PRFHashInfo);
         Debugging::pu8Vec(verifyData, 8, true, "verifyData");
         TLS_Handshake cfinished{HandshakeType::Finished, verifyData};
         auto packet = cfinished.toPacket(m_vsn);
@@ -414,7 +408,7 @@ class TLS_Session
         dataToHash.insert(dataToHash.end(), tpt.realCont.begin(), tpt.realCont.end());
         Debugging::pu8Vec(dataToHash, 8, true, "data to hash");
 
-        auto hash_ = getCSMACInfo().algo({getClientWriteMACKey(), dataToHash});
+        auto hash_ = hmac(getClientWriteMACKey(), dataToHash, getCSInfo().mi.MACHashInfo.hashFn, getCSInfo().mi.MACHashInfo.blockSizeBytes);
         Debugging::pu8Vec(hash_, 8, true, "hash in data");
 
         auto dataWithHash = tpt.realCont;
@@ -423,21 +417,21 @@ class TLS_Session
 
         Debugging::pu8Vec(dataWithHash, 8, true, "dataWithHash(before padding)");
 
-        if (getEncInfo().blockSize > 0) {  // pad if using block cipher
+        if (getCSInfo().ci.blockSize > 0) {  // pad if using block cipher
             uint8_t padding_ =
-                getEncInfo().blockSize - (dataWithHash.size() % getEncInfo().blockSize);
+                getCSInfo().ci.blockSize - (dataWithHash.size() % getCSInfo().ci.blockSize);
             for (uint8_t i = 0; i < padding_; ++i) {
                 dataWithHash.push_back(padding_ - 1);
             }
         }
         Debugging::pu8Vec(dataWithHash, 8, true, "dataWithHash(after padding)");
 
-        auto encIV = genRand(getEncInfo().IVSize);
+        auto encIV = genRand(getCSInfo().ci.IVSize);
         Debugging::pu8Vec(encIV, 8, true, "IV");
-        auto enc = getEncInfo().encFn({getClientWriteKey(), encIV, dataWithHash});
+        auto enc = getCSInfo().ci.encFn({getClientWriteKey(), encIV, dataWithHash});
         Debugging::pu8Vec(enc, 8, true, "dataWithHash(encrypted)");
         std::vector<uint8_t> encryptedPacket;
-        encryptedPacket.reserve(getEncInfo().IVSize + enc.size());
+        encryptedPacket.reserve(getCSInfo().ci.IVSize + enc.size());
         std::copy(encIV.begin(), encIV.end(), std::back_inserter(encryptedPacket));
         std::copy(enc.begin(), enc.end(), std::back_inserter(encryptedPacket));
         return encryptedPacket;
@@ -467,7 +461,7 @@ class TLS_Session
                 throw TLS_Alert(TLS_AlertCode::UnexpectedMessage, true);
             auto expected =
                 TLS_PRF(m_masterSecret, "server finished"s, SHA256::calculate(m_handshakeMessages),
-                        12, getCSMACInfo().algo);
+                        getCSInfo().verifyDataLength, getCSInfo().PRFHashInfo);
             Debugging::pu8Vec(expected, 8, true, "expected server finished");
             Debugging::pu8Vec(hs->m_cont, 8, true, "got server finished");
             auto s = expected == hs->m_cont;
@@ -494,19 +488,19 @@ class TLS_Session
             throw TLS_Alert(TLS_AlertCode::UnexpectedMessage, true);
         if (packet.recordVersion != m_vsn) throw TLS_Alert(TLS_AlertCode::ProtocolVersion, true);
         std::vector<uint8_t> decIV = {packet.realCont.begin(),
-                                      packet.realCont.begin() + getEncInfo().IVSize};
-        std::vector<uint8_t> decData = {packet.realCont.begin() + getEncInfo().IVSize,
+                                      packet.realCont.begin() + getCSInfo().ci.IVSize};
+        std::vector<uint8_t> decData = {packet.realCont.begin() + getCSInfo().ci.IVSize,
                                         packet.realCont.end()};
-        auto dec = getEncInfo().decFn({getServerWriteKey(), decIV, decData});
+        auto dec = getCSInfo().ci.decFn({getServerWriteKey(), decIV, decData});
         if (dec.empty()) throw TLS_Alert(TLS_AlertCode::DecryptionFailed, true);
-        if (getEncInfo().blockSize > 0) {  // block cipher, unpad
+        if (getCSInfo().ci.blockSize > 0) {  // block cipher, unpad
             uint8_t padVal = dec.back();
             if (padVal >= dec.size()) throw TLS_Alert(TLS_AlertCode::DecryptError, true);
             dec.resize(dec.size() - (padVal + 1));
         }
         // TODO: MAC
-        std::vector<uint8_t> mac = {dec.end() - getCSMACInfo().macKeyLength, dec.end()};
-        dec.resize(dec.size() - getCSMACInfo().macKeyLength);
+        std::vector<uint8_t> mac = {dec.end() - getCSInfo().mi.macKeyLength, dec.end()};
+        dec.resize(dec.size() - getCSInfo().mi.macKeyLength);
         return dec;
     }
 

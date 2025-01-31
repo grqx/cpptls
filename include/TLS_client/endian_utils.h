@@ -53,26 +53,6 @@ template <typename T>
 inline constexpr bool is_valid_endian_conversion_subject_v =
     is_valid_endian_conversion_subject<T>::value;
 
-#if 0
-template <typename DEST_T>
-void copy_to_big_endian(uint16_t hs, DEST_T&& dest, size_t bytes = 2)
-{
-    uint16_t ns = htons(hs);
-    bytes = bytes > sizeof(ns) || !bytes ? sizeof(ns) : bytes;
-    auto byte_ptr = reinterpret_cast<const uint8_t*>(&ns) + sizeof(ns) - bytes;
-    std::copy(byte_ptr , byte_ptr + bytes, std::forward<decltype(dest)>(dest));
-}
-
-template <typename DEST_T>
-void copy_to_big_endian(uint32_t hl, DEST_T&& dest, size_t bytes = 4)
-{
-    uint32_t nl = htonl(hl);
-    bytes = bytes > sizeof(nl) || !bytes ? sizeof(nl) : bytes;
-    auto byte_ptr = reinterpret_cast<const uint8_t*>(&nl) + sizeof(nl) - bytes;
-    std::copy(byte_ptr, byte_ptr + bytes, std::forward<decltype(dest)>(dest));
-}
-#endif
-
 // copy to big endian, but dest_t must be a ptr
 template <typename SRC_T, typename DEST_T,
           typename = std::enable_if_t<is_valid_endian_conversion_subject_v<std::decay_t<SRC_T>>>>
