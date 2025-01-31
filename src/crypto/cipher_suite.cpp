@@ -1,25 +1,21 @@
+#include <TLS_client/crypto/bulk/aes.h>
 #include <TLS_client/crypto/cipher_suite.h>
-#include <TLS_client/crypto/hash/sha256.h>
 #include <TLS_client/crypto/hash/sha1.h>
-#include <TLS_client/crypto/symEnc_fns.h>
+#include <TLS_client/crypto/hash/sha256.h>
 
 CipherSuiteInfo getCipherSuiteInfo(const CipherSuite &cipherSuite)
 {
     CipherSuiteInfo ret;
-    ret.PRFHashInfo.hashFn = SHA256::calculate; 
+    ret.PRFHashInfo.hashFn = SHA256::calculate;
     ret.PRFHashInfo.blockSizeBytes = 64;
 
-    constexpr static KexInfo RSA_KI {};
+    constexpr static KexInfo RSA_KI{};
 
-    constexpr static CipherInfo AES_128_CBC {
-        ChatGPT4o::encryptAES_128_CBC,
-        ChatGPT4o::decryptAES_128_CBC,
-        16,
-        16,
-        16,
+    constexpr static CipherInfo AES_128_CBC{
+        encryptAES_128_CBC, decryptAES_128_CBC, 16, 16, 16,
     };
 
-    constexpr static MACInfo SHA1 {
+    constexpr static MACInfo SHA1{
         20,
         20,
         {HashAlgo_SHA1::calculate, HashAlgo_SHA1::BlockSize},

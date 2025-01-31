@@ -1,8 +1,13 @@
 #ifndef TLS_CLIENT_TLS_H
 #define TLS_CLIENT_TLS_H
 
-#include <arpa/inet.h>
-#include <netinet/in.h>
+#include <TLS_client/crypto/cipher_suite.h>
+#include <TLS_client/crypto/prf.h>
+#include <TLS_client/endian_utils.h>
+#include <TLS_client/tls_cert.h>
+#include <TLS_client/tls_exceptions.h>
+#include <TLS_client/tls_genrand.h>
+#include <TLS_client/tls_types.h>
 
 #include <cstdint>
 #include <ctime>
@@ -13,18 +18,7 @@
 #include <sstream>
 #include <vector>
 
-#include "crypto/cipher_suite.h"
-#include "crypto/hmac_fns.h"
-#include "crypto/prf.h"
-#include "crypto/hash/sha256.h"
-#include "crypto/symEnc_fns.h"
 #include "debug.h"
-#include "endian_utils.h"
-#include "tls_cert.h"
-#include "tls_exceptions.h"
-#include "tls_genrand.h"
-#include "tls_types.h"
-
 int main();
 
 class TLS_Session
@@ -49,11 +43,10 @@ class TLS_Session
         if (m_keyBlock.empty() && !m_masterSecret.empty()) {
             std::vector<uint8_t> concatd{m_serverRandom.begin(), m_serverRandom.end()};
             concatd.insert(concatd.end(), m_clientRandom.begin(), m_clientRandom.end());
-            // len was previously 104
-            m_keyBlock = TLS_PRF(
-                m_masterSecret, "key expansion"s, concatd,
-                2 * (getCSInfo().mi.macKeyLength + getCSInfo().ci.keyMaterial + getCSInfo().ci.IVSize),
-                getCSInfo().PRFHashInfo);
+            m_keyBlock = TLS_PRF(m_masterSecret, "key expansion"s, concatd,
+                                 2 * (getCSInfo().mi.macKeyLength + getCSInfo().ci.keyMaterial +
+                                      getCSInfo().ci.IVSize),
+                                 getCSInfo().PRFHashInfo);
             // key_block = PRF(SecurityParameters.master_secret, "key expansion",
             //     SecurityParameters.server_random +
             //     SecurityParameters.client_random);
@@ -105,9 +98,10 @@ class TLS_Session
     {
         if (m_clientWriteIV.empty() && !m_masterSecret.empty()) {
             const auto &kbb = getKeyBlock().begin();
-            m_clientWriteIV = {kbb + 2 * getCSInfo().mi.macKeyLength + 2 * getCSInfo().ci.keyMaterial,
-                               kbb + 2 * getCSInfo().mi.macKeyLength +
-                                   2 * getCSInfo().ci.keyMaterial + getCSInfo().ci.IVSize};
+            m_clientWriteIV = {
+                kbb + 2 * getCSInfo().mi.macKeyLength + 2 * getCSInfo().ci.keyMaterial,
+                kbb + 2 * getCSInfo().mi.macKeyLength + 2 * getCSInfo().ci.keyMaterial +
+                    getCSInfo().ci.IVSize};
         }
         return m_clientWriteIV;
     }
@@ -383,7 +377,8 @@ class TLS_Session
          * also define the Hash to use in the Finished computation.
          */
         auto verifyData = TLS_PRF(m_masterSecret, "client finished"s,
-                                  SHA256::calculate(m_handshakeMessages), getCSInfo().verifyDataLength, getCSInfo().PRFHashInfo);
+                                  getCSInfo().PRFHashInfo.hashFn(m_handshakeMessages),
+                                  getCSInfo().verifyDataLength, getCSInfo().PRFHashInfo);
         Debugging::pu8Vec(verifyData, 8, true, "verifyData");
         TLS_Handshake cfinished{HandshakeType::Finished, verifyData};
         auto packet = cfinished.toPacket(m_vsn);
@@ -408,7 +403,8 @@ class TLS_Session
         dataToHash.insert(dataToHash.end(), tpt.realCont.begin(), tpt.realCont.end());
         Debugging::pu8Vec(dataToHash, 8, true, "data to hash");
 
-        auto hash_ = hmac(getClientWriteMACKey(), dataToHash, getCSInfo().mi.MACHashInfo.hashFn, getCSInfo().mi.MACHashInfo.blockSizeBytes);
+        auto hash_ = hmac(getClientWriteMACKey(), dataToHash, getCSInfo().mi.MACHashInfo.hashFn,
+                          getCSInfo().mi.MACHashInfo.blockSizeBytes);
         Debugging::pu8Vec(hash_, 8, true, "hash in data");
 
         auto dataWithHash = tpt.realCont;
@@ -459,9 +455,9 @@ class TLS_Session
             auto hs = TLS_Handshake::parse(packet_, true);
             if (hs->m_ht != HandshakeType::Finished)
                 throw TLS_Alert(TLS_AlertCode::UnexpectedMessage, true);
-            auto expected =
-                TLS_PRF(m_masterSecret, "server finished"s, SHA256::calculate(m_handshakeMessages),
-                        getCSInfo().verifyDataLength, getCSInfo().PRFHashInfo);
+            auto expected = TLS_PRF(m_masterSecret, "server finished"s,
+                                    getCSInfo().PRFHashInfo.hashFn(m_handshakeMessages),
+                                    getCSInfo().verifyDataLength, getCSInfo().PRFHashInfo);
             Debugging::pu8Vec(expected, 8, true, "expected server finished");
             Debugging::pu8Vec(hs->m_cont, 8, true, "got server finished");
             auto s = expected == hs->m_cont;

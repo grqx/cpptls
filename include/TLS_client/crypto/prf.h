@@ -1,7 +1,6 @@
 #ifndef TLS_CLIENT_CRYPTO_PRF_H
 #define TLS_CLIENT_CRYPTO_PRF_H
 
-#include <TLS_client/crypto/hmac_fns.h>
 #include <TLS_client/crypto/hash.h>
 #include <TLS_client/crypto/hmac.h>
 #include <TLS_client/tls_types.h>
@@ -33,8 +32,7 @@
  * output data.
  */
 std::vector<uint8_t> TLS_P_hash(const std::vector<uint8_t> &secret,
-                                const std::vector<uint8_t> &seed, int len,
-                                const HashInfo &PRFhi)
+                                const std::vector<uint8_t> &seed, int len, const HashInfo &PRFhi)
 {
     /*
      * In this section, we define one PRF, based on HMAC.  This PRF with the

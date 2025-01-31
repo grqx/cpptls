@@ -17,7 +17,7 @@ class SHA256
     std::string hexdigest();
     std::vector<uint8_t> digest();
     static std::vector<uint8_t> calculate(const std::vector<uint8_t> &data);
-    static constexpr size_t BlockSize = 64;      // 512 bits
+    static constexpr size_t BlockSize = 64;  // 512 bits
 
    private:
     static constexpr size_t HashValuesSize = 8;  // SHA256 hash is 256 bits (8 x 32-bit values)

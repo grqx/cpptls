@@ -1,43 +1,44 @@
 #include <TLS_client/crypto/hash/sha256.h>
-#include <sstream>
+
 #include <iomanip>
+#include <sstream>
 #include <stdexcept>
 
 namespace {
-    uint32_t rotateRight(uint32_t value, uint32_t count)
-    {
-        return (value >> count) | (value << (32 - count));
-    }
+uint32_t rotateRight(uint32_t value, uint32_t count)
+{
+    return (value >> count) | (value << (32 - count));
+}
 
-    uint32_t Ch(uint32_t x, uint32_t y, uint32_t z)
-    {
-        return (x & y) ^ (~x & z);
-    }
+uint32_t Ch(uint32_t x, uint32_t y, uint32_t z)
+{
+    return (x & y) ^ (~x & z);
+}
 
-    uint32_t Maj(uint32_t x, uint32_t y, uint32_t z)
-    {
-        return (x & y) ^ (x & z) ^ (y & z);
-    }
+uint32_t Maj(uint32_t x, uint32_t y, uint32_t z)
+{
+    return (x & y) ^ (x & z) ^ (y & z);
+}
 
-    uint32_t Sigma0(uint32_t x)
-    {
-        return rotateRight(x, 2) ^ rotateRight(x, 13) ^ rotateRight(x, 22);
-    }
+uint32_t Sigma0(uint32_t x)
+{
+    return rotateRight(x, 2) ^ rotateRight(x, 13) ^ rotateRight(x, 22);
+}
 
-    uint32_t Sigma1(uint32_t x)
-    {
-        return rotateRight(x, 6) ^ rotateRight(x, 11) ^ rotateRight(x, 25);
-    }
+uint32_t Sigma1(uint32_t x)
+{
+    return rotateRight(x, 6) ^ rotateRight(x, 11) ^ rotateRight(x, 25);
+}
 
-    uint32_t sigma0(uint32_t x)
-    {
-        return rotateRight(x, 7) ^ rotateRight(x, 18) ^ (x >> 3);
-    }
+uint32_t sigma0(uint32_t x)
+{
+    return rotateRight(x, 7) ^ rotateRight(x, 18) ^ (x >> 3);
+}
 
-    uint32_t sigma1(uint32_t x)
-    {
-        return rotateRight(x, 17) ^ rotateRight(x, 19) ^ (x >> 10);
-    }
+uint32_t sigma1(uint32_t x)
+{
+    return rotateRight(x, 17) ^ rotateRight(x, 19) ^ (x >> 10);
+}
 };  // namespace
 
 SHA256::SHA256()
@@ -50,7 +51,7 @@ void SHA256::reset()
     buffer.clear();
     totalBits = 0;
     hashValues = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-                    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
+                  0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
     finalized = false;
     cachedDigest.fill(0);
 }
@@ -73,26 +74,21 @@ std::vector<uint8_t> SHA256::digest()
 
 void SHA256::update(std::string_view data)
 {
-    if (finalized)
-        throw std::logic_error("Cannot update after finalisation");
-    for (auto&& c : data)
-        addByte(c);
+    if (finalized) throw std::logic_error("Cannot update after finalisation");
+    for (auto &&c : data) addByte(c);
 }
 
 void SHA256::update(const std::vector<uint8_t> &data)
 {
-    if (finalized)
-        throw std::logic_error("Cannot update after finalisation");
-    for (auto&& c : data)
-        addByte(c);
+    if (finalized) throw std::logic_error("Cannot update after finalisation");
+    for (auto &&c : data) addByte(c);
 }
 
 // static method
 std::vector<uint8_t> SHA256::calculate(const std::vector<uint8_t> &data)
 {
     SHA256 sha256;
-    for (auto &&byte : data)
-        sha256.addByte(byte);
+    for (auto &&byte : data) sha256.addByte(byte);
     return sha256.digest();
 }
 
@@ -145,7 +141,7 @@ void SHA256::processBlock(const std::vector<uint8_t> &block)
     std::array<uint32_t, 64> W = {};
     for (size_t i = 0; i < 16; ++i) {
         W[i] = (block[i * 4] << 24) | (block[i * 4 + 1] << 16) | (block[i * 4 + 2] << 8) |
-                block[i * 4 + 3];
+               block[i * 4 + 3];
     }
     for (size_t i = 16; i < 64; ++i) {
         W[i] = sigma1(W[i - 2]) + W[i - 7] + sigma0(W[i - 15]) + W[i - 16];

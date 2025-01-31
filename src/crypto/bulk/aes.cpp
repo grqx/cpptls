@@ -1,30 +1,10 @@
-#ifndef TLS_CLIENT_CRYPTO_SYMENC_FNS_H
-#define TLS_CLIENT_CRYPTO_SYMENC_FNS_H
 
-#include <TLS_client/macros.h>
+#include <TLS_client/crypto/bulk/aes.h>
 #include <TLS_client/tls_memory.h>
-#include <TLS_client/tls_types.h>
 #include <openssl/evp.h>
 
-#include <cstdint>
-#include <vector>
+#include <stdexcept>
 
-struct symEncFnArgsType {
-    const std::vector<uint8_t> &key;
-    const std::vector<uint8_t> &iv;
-    const std::vector<uint8_t> &data;
-};
-typedef std::vector<uint8_t> (*symEncFnType)(symEncFnArgsType args);
-
-struct symDecFnArgsType {
-    const std::vector<uint8_t> &key;
-    const std::vector<uint8_t> &iv;
-    const std::vector<uint8_t> &encryptedData;
-};
-typedef std::vector<uint8_t> (*symDecFnType)(symDecFnArgsType args);
-
-namespace ChatGPT4o {
-inline
 std::vector<uint8_t> encryptAES_128_CBC(symEncFnArgsType args)
 {
     if (args.key.size() != 16) {
@@ -82,7 +62,6 @@ std::vector<uint8_t> encryptAES_128_CBC(symEncFnArgsType args)
     return ciphertext;
 }
 
-inline
 std::vector<uint8_t> decryptAES_128_CBC(symDecFnArgsType args)
 {
     if (args.key.size() != 16) {
@@ -139,15 +118,3 @@ std::vector<uint8_t> decryptAES_128_CBC(symDecFnArgsType args)
 
     return plaintext;
 }
-};  // namespace ChatGPT4o
-
-struct CipherInfo {
-    symEncFnType encFn;
-    symDecFnType decFn;
-    int keyMaterial;
-    int IVSize;
-    // -1 for stream ciphers
-    int blockSize;
-};
-
-#endif

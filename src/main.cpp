@@ -270,7 +270,6 @@ int main()
                         TLS_AlertError::throwOnAlertPacket(pkt, true);
                         if (pkt.contTyp == ContentType::Application) {
                             auto res = tlss.TLS_parseAppData(pkt);
-                            Debugging::pu8Vec(res, 8, true, "AppData");
                             std::cout << "Decoded AppData: " << std::string{res.begin(), res.end()}
                                       << '\n';
                         }
@@ -290,14 +289,7 @@ int main()
             Debugging::pu8Vec(tlss.m_serverPubKey, 8, true, "server pubkey");
             Debugging::pu8Vec(tlss.m_preMasterSecret, 8, true, "pre-master secret");
             Debugging::pu8Vec(tlss.m_masterSecret, 8, true, "master secret");
-            // Debugging::pu8Vec(tlss.m_handshakeMessages, 8, true, "handshake
-            // messages");
             Debugging::pu8Vec(tlss.getKeyBlock(), 8, true, "keyblock");
-            Debugging::pu8Vec(tlss.getClientWriteKey(), 8, true, "cwk");
-            Debugging::pu8Vec(tlss.getServerWriteKey(), 8, true, "swk");
-            Debugging::pu8Vec(tlss.getClientWriteIV(), 8, true, "cwiv");
-            Debugging::pu8Vec(tlss.getServerWriteIV(), 8, true, "swiv");
-            Debugging::pu8Vec(tlss.getClientWriteMACKey(), 8, true, "cwmk");
         }
     }
     if (!hasNetworkConn || true) return EXIT_FAILURE;

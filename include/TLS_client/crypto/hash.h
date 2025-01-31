@@ -1,15 +1,11 @@
 #ifndef TLS_CLIENT_CRYPTO_HASH_H
 #define TLS_CLIENT_CRYPTO_HASH_H
 
-#ifdef TLS_HASH_NEED_ALGO
-#include <TLS_client/crypto/hash/sha1.h>
-#include <TLS_client/crypto/hash/sha256.h>
-#undef TLS_HASH_NEED_ALGO
-#endif
-
 #include <cstddef>
-#include <functional>
-#include <TLS_client/tls_types.h>
+#include <cstdint>
+#include <vector>
+
+typedef std::vector<uint8_t> (*HashFnType)(const std::vector<uint8_t> &);
 
 struct HashInfo {
     HashFnType hashFn;

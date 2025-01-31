@@ -25,17 +25,6 @@ enum class TLS_Version : uint16_t {
 //    length), a MAC algorithm, and a PRF
 enum class CipherSuite : uint16_t { TLS_RSA_WITH_AES_128_CBC_SHA = 0x002f };
 
-struct HMAC_hashFnArgsType {
-    const std::vector<uint8_t> &secret;
-    const std::vector<uint8_t> &msg;
-};
-
-// HMAC hash function type
-// returns the HMAC hash
-typedef std::vector<uint8_t> (*HMAC_hashFnType)(HMAC_hashFnArgsType);
-
-typedef std::vector<uint8_t> (*HashFnType)(const std::vector<uint8_t>&);
-
 enum class CompressionMethod : uint8_t { NULL_ = 0x00 };
 
 enum class ContentType : uint8_t {

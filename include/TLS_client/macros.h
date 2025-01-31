@@ -37,12 +37,12 @@
 #endif
 
 #if defined(__cpp_consteval)
-    #define IMMEDIATE_EVAL_FN consteval
-#elif defined (__cpp_constexpr)
-    #define IMMEDIATE_EVAL_FN constexpr
+#define IMMEDIATE_EVAL_FN consteval
+#elif defined(__cpp_constexpr)
+#define IMMEDIATE_EVAL_FN constexpr
 #else
-    #warning "Immediate functions not available"
-    #define IMMEDIATE_EVAL_FN inline
+#warning "Immediate functions not available"
+#define IMMEDIATE_EVAL_FN inline
 #endif
 
 #define NAMEOF(...) #__VA_ARGS__
