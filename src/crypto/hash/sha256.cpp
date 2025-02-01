@@ -1,52 +1,21 @@
 #include <TLS_client/crypto/hash/sha256.h>
+#include <TLS_client/crypto/hash/sha_macros.h>
 
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
 
-namespace {
-uint32_t rotateRight(uint32_t value, uint32_t count)
-{
-    return (value >> count) | (value << (32 - count));
-}
+#define SIGMA0(x) MAKE_S(x, 2, 13, 22)
+#define SIGMA1(x) MAKE_S(x, 6, 11, 25)
+#define sigma0(x) MAKE_s(x, 7, 18, 3)
+#define sigma1(x) MAKE_s(x, 17, 19, 10)
 
-uint32_t Ch(uint32_t x, uint32_t y, uint32_t z)
-{
-    return (x & y) ^ (~x & z);
-}
-
-uint32_t Maj(uint32_t x, uint32_t y, uint32_t z)
-{
-    return (x & y) ^ (x & z) ^ (y & z);
-}
-
-uint32_t Sigma0(uint32_t x)
-{
-    return rotateRight(x, 2) ^ rotateRight(x, 13) ^ rotateRight(x, 22);
-}
-
-uint32_t Sigma1(uint32_t x)
-{
-    return rotateRight(x, 6) ^ rotateRight(x, 11) ^ rotateRight(x, 25);
-}
-
-uint32_t sigma0(uint32_t x)
-{
-    return rotateRight(x, 7) ^ rotateRight(x, 18) ^ (x >> 3);
-}
-
-uint32_t sigma1(uint32_t x)
-{
-    return rotateRight(x, 17) ^ rotateRight(x, 19) ^ (x >> 10);
-}
-};  // namespace
-
-SHA256::SHA256()
+HashAlgo_SHA256::HashAlgo_SHA256()
 {
     reset();
 }
 
-void SHA256::reset()
+void HashAlgo_SHA256::reset()
 {
     buffer.clear();
     totalBits = 0;
@@ -56,7 +25,7 @@ void SHA256::reset()
     cachedDigest.fill(0);
 }
 
-std::string SHA256::hexdigest()
+std::string HashAlgo_SHA256::hexdigest()
 {
     finalize();
     std::ostringstream result;
@@ -66,33 +35,33 @@ std::string SHA256::hexdigest()
     return result.str();
 }
 
-std::vector<uint8_t> SHA256::digest()
+std::vector<uint8_t> HashAlgo_SHA256::digest()
 {
     finalize();
     return {cachedDigest.begin(), cachedDigest.end()};
 }
 
-void SHA256::update(std::string_view data)
+void HashAlgo_SHA256::update(std::string_view data)
 {
     if (finalized) throw std::logic_error("Cannot update after finalisation");
     for (auto &&c : data) addByte(c);
 }
 
-void SHA256::update(const std::vector<uint8_t> &data)
+void HashAlgo_SHA256::update(const std::vector<uint8_t> &data)
 {
     if (finalized) throw std::logic_error("Cannot update after finalisation");
     for (auto &&c : data) addByte(c);
 }
 
 // static method
-std::vector<uint8_t> SHA256::calculate(const std::vector<uint8_t> &data)
+std::vector<uint8_t> HashAlgo_SHA256::calculate(const std::vector<uint8_t> &data)
 {
-    SHA256 sha256;
+    HashAlgo_SHA256 sha256;
     for (auto &&byte : data) sha256.addByte(byte);
     return sha256.digest();
 }
 
-void SHA256::addByte(uint8_t byte)
+void HashAlgo_SHA256::addByte(uint8_t byte)
 {
     buffer.push_back(byte);
     if (buffer.size() == BlockSize) {
@@ -102,7 +71,7 @@ void SHA256::addByte(uint8_t byte)
     totalBits += 8;
 }
 
-void SHA256::finalize()
+void HashAlgo_SHA256::finalize()
 {
     if (finalized) {
         return;  // Do nothing if already finalised
@@ -136,7 +105,7 @@ void SHA256::finalize()
     finalized = true;
 }
 
-void SHA256::processBlock(const std::vector<uint8_t> &block)
+void HashAlgo_SHA256::processBlock(const std::vector<uint8_t> &block)
 {
     std::array<uint32_t, 64> W = {};
     for (size_t i = 0; i < 16; ++i) {
@@ -157,8 +126,8 @@ void SHA256::processBlock(const std::vector<uint8_t> &block)
     auto h = hashValues[7];
 
     for (size_t i = 0; i < 64; ++i) {
-        uint32_t T1 = h + Sigma1(e) + Ch(e, f, g) + K[i] + W[i];
-        uint32_t T2 = Sigma0(a) + Maj(a, b, c);
+        uint32_t T1 = h + SIGMA1(e) + CH(e, f, g) + K[i] + W[i];
+        uint32_t T2 = SIGMA0(a) + MAJ(a, b, c);
         h = g;
         g = f;
         f = e;

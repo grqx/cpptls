@@ -404,7 +404,6 @@ class TLS_Session
         Debugging::pu8Vec(dataToHash, 8, true, "data to hash");
 
         auto hash_ = hmac(getClientWriteMACKey(), dataToHash, getCSInfo().mi.MACHashInfo);
-        Debugging::pu8Vec(hash_, 8, true, "hash in data");
 
         auto dataWithHash = tpt.realCont;
         Debugging::pu8Vec(dataWithHash, 8, true, "data");
@@ -413,18 +412,36 @@ class TLS_Session
         Debugging::pu8Vec(dataWithHash, 8, true, "dataWithHash(before padding)");
 
         if (getCSInfo().ci.blockSize > 0) {  // pad if using block cipher
+            /* padding
+             *    Padding that is added to force the length of the plaintext to be
+             *    an integral multiple of the block cipher's block length.  The
+             *    padding MAY be any length up to 255 bytes, as long as it results
+             *    in the TLSCiphertext.length being an integral multiple of the
+             *    block length.  Lengths longer than necessary might be desirable to
+             *    frustrate attacks on a protocol that are based on analysis of the
+             *    lengths of exchanged messages.  Each uint8 in the padding data
+             *    vector MUST be filled with the padding length value.  The receiver
+             *    MUST check this padding and MUST use the bad_record_mac alert to
+             *    indicate padding errors.
+             *
+             * padding_length
+             *    The padding length MUST be such that the total size of the
+             *    GenericBlockCipher structure is a multiple of the cipher's block
+             *    length.  Legal values range from zero to 255, inclusive.  This
+             *    length specifies the length of the padding field exclusive of the
+             *    padding_length field itself.
+             */
             uint8_t padding_ =
                 getCSInfo().ci.blockSize - (dataWithHash.size() % getCSInfo().ci.blockSize);
-            for (uint8_t i = 0; i < padding_; ++i) {
-                dataWithHash.push_back(padding_ - 1);
-            }
+            // random padding
+            padding_ +=
+                randInt((255U - padding_) / getCSInfo().ci.blockSize) * getCSInfo().ci.blockSize;
+            dataWithHash.resize(dataWithHash.size() + padding_, padding_ - 1);
         }
         Debugging::pu8Vec(dataWithHash, 8, true, "dataWithHash(after padding)");
 
         auto encIV = genRand(getCSInfo().ci.IVSize);
-        Debugging::pu8Vec(encIV, 8, true, "IV");
         auto enc = getCSInfo().ci.encFn({getClientWriteKey(), encIV, dataWithHash});
-        Debugging::pu8Vec(enc, 8, true, "dataWithHash(encrypted)");
         std::vector<uint8_t> encryptedPacket;
         encryptedPacket.reserve(getCSInfo().ci.IVSize + enc.size());
         std::copy(encIV.begin(), encIV.end(), std::back_inserter(encryptedPacket));

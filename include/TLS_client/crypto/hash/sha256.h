@@ -7,10 +7,10 @@
 #include <string_view>
 #include <vector>
 
-class SHA256
+class HashAlgo_SHA256
 {
    public:
-    SHA256();
+    HashAlgo_SHA256();
     void reset();
     void update(std::string_view data);
     void update(const std::vector<uint8_t> &data);

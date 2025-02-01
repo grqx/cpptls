@@ -40,8 +40,7 @@ inline void pu8Vec(const U8CONTAINER_ &u8vec, size_t alignTo = 8, bool addLSep =
 
 extern "C" {
 DEPRECATION_START
-DISABLE_DEPRECATION_WARNING_START
-size_t hexToBytes(const char *hex, unsigned char *buffer, size_t bufferSize)
+inline size_t hexToBytes(const char *hex, unsigned char *buffer, size_t bufferSize)
 {
     size_t byteCount = 0;
 
@@ -65,16 +64,10 @@ size_t hexToBytes(const char *hex, unsigned char *buffer, size_t bufferSize)
 
     return byteCount;
 }
-DISABLE_DEPRECATION_WARNING_END
 DEPRECATION_END
 }  // extern "C"
 
-void a()
-{
-    hexToBytes(nullptr, nullptr, 0);
-}
-
-uint8_t parseHexDigits_(char c)
+inline uint8_t parseHexDigits_(char c)
 {
     if (std::isdigit(c))
         return c - '0';
@@ -86,7 +79,7 @@ uint8_t parseHexDigits_(char c)
         return UINT8_MAX;
 }
 
-std::vector<uint8_t> parseBytesArray(const std::string &str)
+inline std::vector<uint8_t> parseBytesArray(const std::string &str)
 {
     std::vector<uint8_t> ret;
     for (size_t i = 0; i < str.size(); i += 2) {
@@ -119,7 +112,7 @@ std::vector<uint8_t> parseBytesArray(const std::string &str)
     return ret;
 }
 
-std::string readTilEOF(std::istream &f = std::cin)
+inline std::string readTilEOF(std::istream &f = std::cin)
 {
     std::string s, ln;
     while (std::getline(f, ln)) {
@@ -128,8 +121,9 @@ std::string readTilEOF(std::istream &f = std::cin)
     return s;
 }
 
-void bruteForceStrings(const std::function<void(const std::string &)> &callback,
-                       const size_t maxLength = 15, const char min_ = '\0', const char max_ = 0xFF)
+inline void bruteForceStrings(const std::function<void(const std::string &)> &callback,
+                              const size_t maxLength = 15, const char min_ = '\0',
+                              const char max_ = 0xFF)
 {
     for (size_t length = 1; length <= maxLength; ++length) {
         std::string current(length, min_);

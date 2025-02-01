@@ -19,6 +19,15 @@ std::vector<uint8_t> genRand(size_t len)
     return ret;
 }
 
+template <template <typename> typename DIS_T = std::uniform_int_distribution, typename RES_T = int>
+RES_T randInt(RES_T max, RES_T min = 0)
+{
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    DIS_T<RES_T> dis(0, UINT8_MAX);
+    return dis(gen);
+}
+
 template <template <typename> typename DIS_T = std::uniform_int_distribution, typename ITER_T>
 void fillRand(std::vector<uint8_t> &v, ITER_T &&beg, ITER_T &&end)
 {

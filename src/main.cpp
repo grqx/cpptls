@@ -62,8 +62,18 @@ int main()
     }
 
     {
-        TLS_Session tlss(TLS_Version::TLS_1_2, {CipherSuite::TLS_RSA_WITH_AES_128_CBC_SHA},
-                         {CompressionMethod::NULL_});
+        TLS_Session tlss{
+            TLS_Version::TLS_1_2,
+            {
+                CipherSuite::TLS_RSA_WITH_AES_256_CBC_SHA256,
+                CipherSuite::TLS_RSA_WITH_AES_256_CBC_SHA,
+                CipherSuite::TLS_RSA_WITH_AES_128_CBC_SHA256,
+                CipherSuite::TLS_RSA_WITH_AES_128_CBC_SHA,
+            },
+            {
+                CompressionMethod::NULL_,
+            },
+        };
         auto ch = tlss.TLS_writeClientHello();
         auto res = TLS_composeRecordLayer(ch);
         int socket_;

@@ -9,4 +9,7 @@
 std::vector<uint8_t> encryptAES_128_CBC(symEncFnArgsType args);
 std::vector<uint8_t> decryptAES_128_CBC(symDecFnArgsType args);
 
+std::vector<uint8_t> encryptAES_256_CBC(symEncFnArgsType args);
+std::vector<uint8_t> decryptAES_256_CBC(symDecFnArgsType args);
+
 #endif
