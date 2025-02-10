@@ -1,5 +1,5 @@
-#ifndef TLS_CLIENT_TLS_GENRAND_H
-#define TLS_CLIENT_TLS_GENRAND_H
+#ifndef LIBCPPTLS_TLS_GENRAND_H
+#define LIBCPPTLS_TLS_GENRAND_H
 
 #include <cstdint>
 #include <random>

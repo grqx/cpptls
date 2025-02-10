@@ -1,5 +1,5 @@
-#ifndef TLS_CLIENT_TLS_CERT_H
-#define TLS_CLIENT_TLS_CERT_H
+#ifndef LIBCPPTLS_TLS_CERT_H
+#define LIBCPPTLS_TLS_CERT_H
 
 #include <openssl/err.h>
 #include <openssl/pem.h>

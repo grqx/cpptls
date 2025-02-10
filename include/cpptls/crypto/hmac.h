@@ -1,8 +1,8 @@
-#ifndef TLS_CLIENT_CRYPTO_HMAC_H
-#define TLS_CLIENT_CRYPTO_HMAC_H
+#ifndef LIBCPPTLS_CRYPTO_HMAC_H
+#define LIBCPPTLS_CRYPTO_HMAC_H
 
-#include <TLS_client/crypto/hash.h>
-#include <TLS_client/macros.h>
+#include <cpptls/crypto/hash.h>
+#include <cpptls/macros.h>
 
 #include <cstddef>
 #include <cstdint>

@@ -1,5 +1,5 @@
-#ifndef TLS_CLIENT_UTILS_H
-#define TLS_CLIENT_UTILS_H
+#ifndef LIBCPPTLS_UTILS_H
+#define LIBCPPTLS_UTILS_H
 
 #include <string_view>
 

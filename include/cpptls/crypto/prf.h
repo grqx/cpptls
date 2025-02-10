@@ -1,9 +1,9 @@
-#ifndef TLS_CLIENT_CRYPTO_PRF_H
-#define TLS_CLIENT_CRYPTO_PRF_H
+#ifndef LIBCPPTLS_CRYPTO_PRF_H
+#define LIBCPPTLS_CRYPTO_PRF_H
 
-#include <TLS_client/crypto/hash.h>
-#include <TLS_client/crypto/hmac.h>
-#include <TLS_client/tls_types.h>
+#include <cpptls/crypto/hash.h>
+#include <cpptls/crypto/hmac.h>
+#include <cpptls/tls_types.h>
 
 #include <cstdint>
 #include <vector>

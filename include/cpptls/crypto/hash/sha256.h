@@ -1,5 +1,5 @@
-#ifndef TLS_CLIENT_CRYPTO_HASH_SHA256_H
-#define TLS_CLIENT_CRYPTO_HASH_SHA256_H
+#ifndef LIBCPPTLS_CRYPTO_HASH_SHA256_H
+#define LIBCPPTLS_CRYPTO_HASH_SHA256_H
 
 #include <array>
 #include <cstdint>

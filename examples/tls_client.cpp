@@ -1,6 +1,6 @@
-#include <TLS_client/debug.h>
-#include <TLS_client/tls.h>
-#include <TLS_client/tls_memory.h>
+#include <cpptls/debug.h>
+#include <cpptls/tls.h>
+#include <cpptls/tls_memory.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <openssl/err.h>
@@ -34,6 +34,8 @@ SSL_CTX *create_context()
     return ctx;
 }
 
+const char *keylog_path = "/mnt/c/Users/Admin/Desktop/sslg2.log";
+
 int main()
 {
     const char *request = "GET / HTTP/1.1\r\nHost: google.com\r\nConnection: close\r\n\r\n";
@@ -61,7 +63,7 @@ int main()
         server_addr.sin_addr = ((struct sockaddr_in *)res->ai_addr)->sin_addr;
     }
 
-    {
+    try {
         TLS_Session tlss{
             TLS_Version::TLS_1_2,
             {
@@ -69,6 +71,7 @@ int main()
                 CipherSuite::TLS_RSA_WITH_AES_256_CBC_SHA,
                 CipherSuite::TLS_RSA_WITH_AES_128_CBC_SHA256,
                 CipherSuite::TLS_RSA_WITH_AES_128_CBC_SHA,
+                // CipherSuite::TLS_RSA_WITH_AES_128_GCM_SHA256,
             },
             {
                 CompressionMethod::NULL_,
@@ -177,6 +180,7 @@ int main()
 
         auto kexPackets = tlss.TLS_writeClientKex();
         if (!kexPackets) throw 888.0f;
+        tlss.writeKeyLog(keylog_path);
         std::list<std::vector<uint8_t>> recLayerMsgs;
         for (auto &&kexPacket : *kexPackets) {
             auto recLayerMsgList = TLS_composeRecordLayer(kexPacket);
@@ -301,8 +305,12 @@ int main()
             Debugging::pu8Vec(tlss.m_masterSecret, 8, true, "master secret");
             Debugging::pu8Vec(tlss.getKeyBlock(), 8, true, "keyblock");
         }
+    } catch (std::exception &e) {
+        std::cerr << "what(): " << e.what() << '\n';
+    } catch (...) {
+        std::cerr << "Unknown exception\n";
     }
-    if (!hasNetworkConn || true) return EXIT_FAILURE;
+    if (!hasNetworkConn || false) return EXIT_FAILURE;
 
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     unique_ptr_with_deleter<int> sock_ptr{&sock, [](int *s) { ::close(*s); }};
@@ -328,8 +336,35 @@ int main()
         ERR_print_errors_fp(stderr);
         return EXIT_FAILURE;
     }
+    SSL_CTX_set_keylog_callback(ctx.get(), [](const SSL* ssl_, const char* line) {
+        using namespace std::string_literals;
+        std::ostringstream oss;
+        oss << line << '\n';
+        std::ofstream ofs{keylog_path, std::ios::app};
+        ofs << oss.str();
+        ofs.close();
+        std::cout << oss.str();
+        std::string ln = line;
+        if (ln.substr(0, ln.find(' ')) == "CLIENT_RANDOM"s) {
+            ln = ln.substr(ln.rfind(' ') + 1);
+            std::cout << "OSSL MASTER SECRET SHOULD BE " << ln << '\n';
+            std::vector<uint8_t> seed(64);
+            SSL_get_server_random(ssl_, seed.data(), 32);
+            SSL_get_client_random(ssl_, seed.data() + 32, 32);
+            auto kblock = TLS_PRF(Debugging::parseBytesArray(ln),
+                "key expansion"s, seed, 104, SHA256_hashinfo);
+            Debugging::pu8Vec(kblock, 8, true, "kblock");
+            std::vector<uint8_t> cwkey {kblock.data() + 64, kblock.data() + 80};
+            Debugging::pu8Vec(cwkey, 8, true, "cwkey");
+            std::cout << "cwkey(c): " << Debugging::genCStyleArray(cwkey) << '\n';
+            std::vector<uint8_t> cwiv {kblock.data() + 96, kblock.data() + 100};
+            Debugging::pu8Vec(cwiv, 8, true, "cwiv");
+            std::cout << "cwiv(c): " << Debugging::genCStyleArray(cwiv) << '\n';
+        }
+    });
+    SSL_CTX_set_cipher_list(ctx.get(), "AES128-GCM-SHA256");
 
-    unique_ptr_with_deleter<SSL> ssl{SSL_new(ctx.get()), SSL_free};
+    unique_ptr_with_deleter<SSL> ssl{SSL_new(ctx.get()), [](SSL* ssl_) { if (ssl_) SSL_free(ssl_); }};
     if (!ssl) {
         std::cerr << "SSL creation failed\n";
         ERR_print_errors_fp(stderr);

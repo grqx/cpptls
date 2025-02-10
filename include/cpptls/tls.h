@@ -1,13 +1,14 @@
-#ifndef TLS_CLIENT_TLS_H
-#define TLS_CLIENT_TLS_H
+#ifndef LIBCPPTLS_TLS_H
+#define LIBCPPTLS_TLS_H
 
-#include <TLS_client/crypto/cipher_suite.h>
-#include <TLS_client/crypto/prf.h>
-#include <TLS_client/endian_utils.h>
-#include <TLS_client/tls_cert.h>
-#include <TLS_client/tls_exceptions.h>
-#include <TLS_client/tls_genrand.h>
-#include <TLS_client/tls_types.h>
+#include <cpptls/crypto/cipher_suite.h>
+#include <cpptls/crypto/prf.h>
+#include <cpptls/endian_utils.h>
+#include <cpptls/tls_cert.h>
+#include <cpptls/tls_exceptions.h>
+#include <cpptls/tls_genrand.h>
+#include <cpptls/tls_types.h>
+#include <cpptls/export.h>
 
 #include <cstdint>
 #include <ctime>
@@ -21,7 +22,7 @@
 #include "debug.h"
 int main();
 
-class TLS_Session
+class TLS_CLIENT_API TLS_Session
 {
    private:
     std::vector<uint8_t> m_sessionID;
@@ -45,7 +46,7 @@ class TLS_Session
             concatd.insert(concatd.end(), m_clientRandom.begin(), m_clientRandom.end());
             m_keyBlock = TLS_PRF(m_masterSecret, "key expansion"s, concatd,
                                  2 * (getCSInfo().mi.macKeyLength + getCSInfo().ci.keyMaterial +
-                                      getCSInfo().ci.IVSize),
+                                      getCSInfo().ci.fixedIVLength),
                                  getCSInfo().PRFHashInfo);
             // key_block = PRF(SecurityParameters.master_secret, "key expansion",
             //     SecurityParameters.server_random +
@@ -101,7 +102,7 @@ class TLS_Session
             m_clientWriteIV = {
                 kbb + 2 * getCSInfo().mi.macKeyLength + 2 * getCSInfo().ci.keyMaterial,
                 kbb + 2 * getCSInfo().mi.macKeyLength + 2 * getCSInfo().ci.keyMaterial +
-                    getCSInfo().ci.IVSize};
+                    getCSInfo().ci.fixedIVLength};
         }
         return m_clientWriteIV;
     }
@@ -111,9 +112,9 @@ class TLS_Session
         if (m_serverWriteIV.empty() && !m_masterSecret.empty()) {
             const auto &kbb = getKeyBlock().begin();
             m_serverWriteIV = {kbb + 2 * getCSInfo().mi.macKeyLength +
-                                   2 * getCSInfo().ci.keyMaterial + getCSInfo().ci.IVSize,
+                                   2 * getCSInfo().ci.keyMaterial + getCSInfo().ci.fixedIVLength,
                                kbb + 2 * getCSInfo().mi.macKeyLength +
-                                   2 * getCSInfo().ci.keyMaterial + 2 * getCSInfo().ci.IVSize};
+                                   2 * getCSInfo().ci.keyMaterial + 2 * getCSInfo().ci.fixedIVLength};
         }
         return m_serverWriteIV;
     }
@@ -126,7 +127,11 @@ class TLS_Session
     TLS_Version m_vsn;
     TLS_State_ m_state_ = TLS_State_::Created;
     uint64_t m_seqNum = 0;
+    // sequence number for the other side of the connection
+    uint64_t m_seqOther = 0;
     // flag: whether client/server has changed cipher suite
+    // TODO: deprecate this, use two bools instead, no space will be wasted
+    // since member variables are stored contiguously
     uint8_t m_cSChanged = 0;
 
    public:
@@ -352,7 +357,6 @@ class TLS_Session
             m_masterSecret = TLS_PRF(m_preMasterSecret, "master secret"s, concatdRandoms, 48,
                                      getCSInfo().PRFHashInfo);
         }
-        writeKeyLog();
         auto ckxPacket = ckx.toPacket(m_vsn);
         std::copy(ckxPacket.realCont.begin(), ckxPacket.realCont.end(),
                   std::back_inserter(m_handshakeMessages));
@@ -395,58 +399,103 @@ class TLS_Session
             throw std::runtime_error(
                 "Client hasn't sent change cipher spec but requested encryption");
         std::vector<uint8_t> dataToHash;
-        dataToHash.reserve(13 + tpt.realCont.size());
+        dataToHash.reserve(getCSInfo().ci.blockSize ? 13 + tpt.realCont.size() : 13);
         stdcopy_to_big_endian(m_seqNum++, std::back_inserter(dataToHash));
         dataToHash.push_back(static_cast<uint8_t>(tpt.contTyp));
         stdcopy_to_big_endian(m_vsn, std::back_inserter(dataToHash), 2);
         stdcopy_to_big_endian(tpt.realCont.size(), std::back_inserter(dataToHash), 2);
-        dataToHash.insert(dataToHash.end(), tpt.realCont.begin(), tpt.realCont.end());
-        Debugging::pu8Vec(dataToHash, 8, true, "data to hash");
+        if (getCSInfo().ci.blockSize) {  // block or stream cipher
+            /*
+            * stream-ciphered struct {
+            *     opaque content[TLSCompressed.length];
+            *     opaque MAC[SecurityParameters.mac_length];
+            * } GenericStreamCipher;
+            *
+            * struct {
+            *     opaque IV[SecurityParameters.record_iv_length];
+            *     block-ciphered struct {
+            *         opaque content[TLSCompressed.length];
+            *         opaque MAC[SecurityParameters.mac_length];
+            *         uint8 padding[GenericBlockCipher.padding_length];
+            *         uint8 padding_length;
+            *     };
+            * } GenericBlockCipher;
+            */
+            dataToHash.insert(dataToHash.end(), tpt.realCont.begin(), tpt.realCont.end());
+            Debugging::pu8Vec(dataToHash, 8, true, "data to hash");
 
-        auto hash_ = hmac(getClientWriteMACKey(), dataToHash, getCSInfo().mi.MACHashInfo);
+            auto hash_ = hmac(getClientWriteMACKey(), dataToHash, getCSInfo().mi.MACHashInfo);
 
-        auto dataWithHash = tpt.realCont;
-        Debugging::pu8Vec(dataWithHash, 8, true, "data");
-        dataWithHash.insert(dataWithHash.end(), hash_.begin(), hash_.end());
+            auto dataWithHash = tpt.realCont;
+            Debugging::pu8Vec(dataWithHash, 8, true, "data");
+            dataWithHash.insert(dataWithHash.end(), hash_.begin(), hash_.end());
 
-        Debugging::pu8Vec(dataWithHash, 8, true, "dataWithHash(before padding)");
+            if (getCSInfo().ci.blockSize > 0) {  // pad if using block cipher
+                /* 
+                 * padding
+                 *    Padding that is added to force the length of the plaintext to be
+                 *    an integral multiple of the block cipher's block length.  The
+                 *    padding MAY be any length up to 255 bytes, as long as it results
+                 *    in the TLSCiphertext.length being an integral multiple of the
+                 *    block length.  Lengths longer than necessary might be desirable to
+                 *    frustrate attacks on a protocol that are based on analysis of the
+                 *    lengths of exchanged messages.  Each uint8 in the padding data
+                 *    vector MUST be filled with the padding length value.  The receiver
+                 *    MUST check this padding and MUST use the bad_record_mac alert to
+                 *    indicate padding errors.
+                 *
+                 * padding_length
+                 *    The padding length MUST be such that the total size of the
+                 *    GenericBlockCipher structure is a multiple of the cipher's block
+                 *    length.  Legal values range from zero to 255, inclusive.  This
+                 *    length specifies the length of the padding field exclusive of the
+                 *    padding_length field itself.
+                 */
+                uint8_t padding_ =
+                    getCSInfo().ci.blockSize - (dataWithHash.size() % getCSInfo().ci.blockSize);
+                // random padding
+                padding_ +=
+                    randInt((255U - padding_) / getCSInfo().ci.blockSize) * getCSInfo().ci.blockSize;
+                dataWithHash.resize(dataWithHash.size() + padding_, padding_ - 1);
+            }
+            Debugging::pu8Vec(dataWithHash, 8, true, "dataWithHash(after padding)");
 
-        if (getCSInfo().ci.blockSize > 0) {  // pad if using block cipher
-            /* padding
-             *    Padding that is added to force the length of the plaintext to be
-             *    an integral multiple of the block cipher's block length.  The
-             *    padding MAY be any length up to 255 bytes, as long as it results
-             *    in the TLSCiphertext.length being an integral multiple of the
-             *    block length.  Lengths longer than necessary might be desirable to
-             *    frustrate attacks on a protocol that are based on analysis of the
-             *    lengths of exchanged messages.  Each uint8 in the padding data
-             *    vector MUST be filled with the padding length value.  The receiver
-             *    MUST check this padding and MUST use the bad_record_mac alert to
-             *    indicate padding errors.
-             *
-             * padding_length
-             *    The padding length MUST be such that the total size of the
-             *    GenericBlockCipher structure is a multiple of the cipher's block
-             *    length.  Legal values range from zero to 255, inclusive.  This
-             *    length specifies the length of the padding field exclusive of the
-             *    padding_length field itself.
+            auto encIV = genRand(getCSInfo().ci.recordIVLength);
+            auto enc = getCSInfo().ci.enc.bos({getClientWriteKey(), encIV, dataWithHash});
+            encIV.insert(encIV.end(), enc.begin(), enc.end());
+            return encIV;
+        } else {  // AEAD cipher
+            /*
+            * struct {
+            *    opaque nonce_explicit[SecurityParameters.record_iv_length];
+            *    aead-ciphered struct {
+            *        opaque content[TLSCompressed.length];
+            *    };
+            * } GenericAEADCipher;
+            */
+            // auto nonceExplicit = genRand(getCSInfo().ci.recordIVLength);  // SecurityParameters.record_iv_length
+            // some1 said that the nonce_explicit should be seq num
+            std::vector<uint8_t> nonceExplicit(getCSInfo().ci.recordIVLength);
+            copy_to_ptr_big_endian(m_seqNum - 1, nonceExplicit.data(), getCSInfo().ci.recordIVLength);  // SecurityParameters.record_iv_length
+            /*
+             * AEADEncrypted = AEAD-Encrypt(write_key, nonce, plaintext,
+             *                  additional_data)
              */
-            uint8_t padding_ =
-                getCSInfo().ci.blockSize - (dataWithHash.size() % getCSInfo().ci.blockSize);
-            // random padding
-            padding_ +=
-                randInt((255U - padding_) / getCSInfo().ci.blockSize) * getCSInfo().ci.blockSize;
-            dataWithHash.resize(dataWithHash.size() + padding_, padding_ - 1);
+            // dataToHash = additional_data
+            auto enc = getCSInfo().ci.enc.aead({getClientWriteKey(), nonceExplicit, tpt.realCont, dataToHash, getClientWriteIV()});
+            auto decd = getCSInfo().ci.dec.aead({getClientWriteKey(), nonceExplicit, enc, dataToHash, getClientWriteIV()});
+            {
+                Debugging::pu8Vec(dataToHash, 8, true, "AEAD AAD");
+                Debugging::pu8Vec(tpt.realCont, 8, true, "raw data to encrypt");
+                Debugging::pu8Vec(getClientWriteKey(), 8, true, "wkey");
+                Debugging::pu8Vec(nonceExplicit, 8, true, "AEAD explicit nonce/IV");
+                Debugging::pu8Vec(getClientWriteIV(), 8, true, "AEAD client write IV(salt)");
+                Debugging::pu8Vec(enc, 8, true, "AEAD-encrypted data");
+            }
+            nonceExplicit.insert(nonceExplicit.end(), enc.begin(), enc.end());
+            return nonceExplicit;
         }
-        Debugging::pu8Vec(dataWithHash, 8, true, "dataWithHash(after padding)");
-
-        auto encIV = genRand(getCSInfo().ci.IVSize);
-        auto enc = getCSInfo().ci.encFn({getClientWriteKey(), encIV, dataWithHash});
-        std::vector<uint8_t> encryptedPacket;
-        encryptedPacket.reserve(getCSInfo().ci.IVSize + enc.size());
-        std::copy(encIV.begin(), encIV.end(), std::back_inserter(encryptedPacket));
-        std::copy(enc.begin(), enc.end(), std::back_inserter(encryptedPacket));
-        return encryptedPacket;
+        UNREACHABLE;
     }
 
     std::optional<TLSPlaintext> TLS_writeAppData(const std::vector<uint8_t> &data)
@@ -499,21 +548,48 @@ class TLS_Session
         if (!(m_cSChanged & CipherSpecChangedFlag::serverChanged))
             throw TLS_Alert(TLS_AlertCode::UnexpectedMessage, true);
         if (packet.recordVersion != m_vsn) throw TLS_Alert(TLS_AlertCode::ProtocolVersion, true);
-        std::vector<uint8_t> decIV = {packet.realCont.begin(),
-                                      packet.realCont.begin() + getCSInfo().ci.IVSize};
-        std::vector<uint8_t> decData = {packet.realCont.begin() + getCSInfo().ci.IVSize,
-                                        packet.realCont.end()};
-        auto dec = getCSInfo().ci.decFn({getServerWriteKey(), decIV, decData});
-        if (dec.empty()) throw TLS_Alert(TLS_AlertCode::DecryptionFailed, true);
-        if (getCSInfo().ci.blockSize > 0) {  // block cipher, unpad
-            uint8_t padVal = dec.back();
-            if (padVal >= dec.size()) throw TLS_Alert(TLS_AlertCode::DecryptError, true);
-            dec.resize(dec.size() - (padVal + 1));
+        std::vector<uint8_t> dataToHash;
+        // gross size, the decrypted content size is usually smaller than the encrypted
+        dataToHash.reserve(getCSInfo().ci.blockSize ? 13 + packet.realCont.size() : 13);
+        stdcopy_to_big_endian(m_seqOther++, std::back_inserter(dataToHash));
+        dataToHash.push_back(static_cast<uint8_t>(packet.contTyp));
+        stdcopy_to_big_endian(packet.recordVersion, std::back_inserter(dataToHash), 2);
+        if (getCSInfo().ci.blockSize) {  // block or stream cipher
+            // dont hash the dataToHash vector yet
+            // we need to copy the decrypted data to the end of it afterwards
+            std::vector<uint8_t> decIV {packet.realCont.begin(),
+                                        packet.realCont.begin() + getCSInfo().ci.recordIVLength};
+            std::vector<uint8_t> decData {packet.realCont.begin() + getCSInfo().ci.recordIVLength,
+                                            packet.realCont.end()};
+            auto dec = getCSInfo().ci.dec.bos({getServerWriteKey(), decIV, decData});
+            if (getCSInfo().ci.blockSize > 0) {  // block cipher, unpad
+                uint8_t padVal = dec.back();
+                if (padVal >= dec.size()) throw TLS_Alert(TLS_AlertCode::DecryptError, true);
+                dec.resize(dec.size() - (padVal + 1));
+            }
+            std::vector<uint8_t> mac = {dec.end() - getCSInfo().mi.macKeyLength, dec.end()};
+            dec.resize(dec.size() - getCSInfo().mi.macKeyLength);
+            stdcopy_to_big_endian(dec.size(), std::back_inserter(dataToHash), 2);
+            dataToHash.insert(dataToHash.end(), dec.begin(), dec.end());
+            auto hash_ = hmac(getServerWriteMACKey(), dataToHash, getCSInfo().PRFHashInfo);
+            if (mac != hash_) {
+                Debugging::pu8Vec(dataToHash, 8, true, "MAC mismatch: constructed data to hash");
+                Debugging::pu8Vec(hash_, 8, true, "MAC mismatch: expected MAC");
+                Debugging::pu8Vec(mac, 8, true, "MAC mismatch: got MAC");
+                // throw TLS_Alert(TLS_AlertCode::BadRecordMAC, true);
+            }
+            return dec;
+        } else {  // AEAD cipher
+            // TODO: add this as a property of a AEAD cipher
+            auto AEADOverhead = 16;
+            stdcopy_to_big_endian(packet.realCont.size() - AEADOverhead, std::back_inserter(dataToHash), 2);
+            std::vector<uint8_t> decIV {packet.realCont.begin(),
+                                        packet.realCont.begin() + getCSInfo().ci.recordIVLength};
+            std::vector<uint8_t> decData {packet.realCont.begin() + getCSInfo().ci.recordIVLength,
+                                            packet.realCont.end()};
+            auto dec = getCSInfo().ci.dec.aead({getServerWriteKey(), decIV, decData, dataToHash, getServerWriteIV()});
+            return dec;
         }
-        // TODO: MAC
-        std::vector<uint8_t> mac = {dec.end() - getCSInfo().mi.macKeyLength, dec.end()};
-        dec.resize(dec.size() - getCSInfo().mi.macKeyLength);
-        return dec;
     }
 
     std::vector<uint8_t> TLS_parseAppData(const TLSPlaintext &packet)
@@ -525,9 +601,9 @@ class TLS_Session
         return decPlainText(packet);
     }
 
-    void writeKeyLog()
+    void writeKeyLog(const std::string &path)
     {
-        std::ofstream ofs{"/mnt/c/Users/Admin/Desktop/sslg2.log", std::ios::app};
+        std::ofstream ofs{path, std::ios::app};
         std::ostringstream buf;
         buf << "CLIENT_RANDOM ";
         Debugging::pu8Vec(m_clientRandom, 0, false, "", buf);
@@ -553,6 +629,7 @@ class TLS_Session
  *    into a single TLSPlaintext record, or a single message MAY be
  *    fragmented across several records).
  */
+TLS_CLIENT_API
 [[nodiscard]] std::list<std::vector<uint8_t>> TLS_composeRecordLayer(const TLSPlaintext &cont)
 {
     size_t packetLen_ = cont.realCont.size();
@@ -576,11 +653,12 @@ class TLS_Session
     return {TLSmsg};
 }
 
-struct TLS_parseRecordLayerResult_ {
+struct TLS_CLIENT_API TLS_parseRecordLayerResult_ {
     std::list<TLSPlaintext> parsedContent;
     size_t parsedBytes;
 };
 
+TLS_CLIENT_API
 TLS_parseRecordLayerResult_ TLS_parseRecordLayer(const std::vector<uint8_t> &packet)
 {
     std::cout << "packet of " << packet.size() << " bytes\n";

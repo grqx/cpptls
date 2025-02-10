@@ -1,5 +1,5 @@
-#ifndef TLS_CLIENT_CRYPTO_HASH_SHA_MACROS_H
-#define TLS_CLIENT_CRYPTO_HASH_SHA_MACROS_H
+#ifndef LIBCPPTLS_CRYPTO_HASH_SHA_MACROS_H
+#define LIBCPPTLS_CRYPTO_HASH_SHA_MACROS_H
 
 #define ROTR(x, n) (((x) >> n) | ((x) << (sizeof(x) * 8 - (n))))
 #define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))

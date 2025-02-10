@@ -1,5 +1,5 @@
-#ifndef TLS_CLIENT_MACROS_H
-#define TLS_CLIENT_MACROS_H
+#ifndef LIBCPPTLS_MACROS_H
+#define LIBCPPTLS_MACROS_H
 
 #define DEPRECATION_START inline namespace [[deprecated]] Deprecated {
 #define DEPRECATION_END }

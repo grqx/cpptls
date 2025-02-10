@@ -1,5 +1,5 @@
-#ifndef TLS_CLIENT_ENDIAN_UTILS_H
-#define TLS_CLIENT_ENDIAN_UTILS_H
+#ifndef LIBCPPTLS_ENDIAN_UTILS_H
+#define LIBCPPTLS_ENDIAN_UTILS_H
 
 #include <cstddef>
 #include <cstdint>

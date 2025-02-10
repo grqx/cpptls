@@ -1,5 +1,5 @@
-#ifndef TLS_CLIENT_TLS_EXCEPTIONS_H
-#define TLS_CLIENT_TLS_EXCEPTIONS_H
+#ifndef LIBCPPTLS_TLS_EXCEPTIONS_H
+#define LIBCPPTLS_TLS_EXCEPTIONS_H
 
 #include <optional>
 #include <stdexcept>

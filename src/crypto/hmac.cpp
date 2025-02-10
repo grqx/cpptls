@@ -1,7 +1,7 @@
-#include <TLS_client/crypto/hash.h>
-#include <TLS_client/crypto/hash/sha1.h>
-#include <TLS_client/crypto/hash/sha256.h>
-#include <TLS_client/crypto/hmac.h>
+#include <cpptls/crypto/hash.h>
+#include <cpptls/crypto/hash/sha1.h>
+#include <cpptls/crypto/hash/sha256.h>
+#include <cpptls/crypto/hmac.h>
 
 std::vector<uint8_t> hmac(const std::vector<uint8_t>& key, const std::vector<uint8_t>& message,
                           const HashInfo& hi)

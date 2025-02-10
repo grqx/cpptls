@@ -1,5 +1,5 @@
-#ifndef TLS_CLIENT_TLS_TYPES_H
-#define TLS_CLIENT_TLS_TYPES_H
+#ifndef LIBCPPTLS_TLS_TYPES_H
+#define LIBCPPTLS_TLS_TYPES_H
 
 #include <cstdint>
 #include <functional>
@@ -20,15 +20,7 @@ enum class TLS_Version : uint16_t {
     TLS_1_3 = 0x0304,
 };
 
-// Each cipher suite defines a key
-//    exchange algorithm, a bulk encryption algorithm (including secret key
-//    length), a MAC algorithm, and a PRF
-enum class CipherSuite : uint16_t {
-    TLS_RSA_WITH_AES_128_CBC_SHA = 0x002f,
-    TLS_RSA_WITH_AES_128_CBC_SHA256 = 0x003c,
-    TLS_RSA_WITH_AES_256_CBC_SHA = 0x0035,
-    TLS_RSA_WITH_AES_256_CBC_SHA256 = 0x003d,
-};
+enum class CipherSuite : uint16_t;
 
 enum class CompressionMethod : uint8_t { NULL_ = 0x00 };
 

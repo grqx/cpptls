@@ -1,5 +1,5 @@
-#ifndef TLS_CLIENT_CRYPTO_HASH_SHA512_H
-#define TLS_CLIENT_CRYPTO_HASH_SHA512_H
+#ifndef LIBCPPTLS_CRYPTO_HASH_SHA512_H
+#define LIBCPPTLS_CRYPTO_HASH_SHA512_H
 
 #include <array>
 #include <cstdint>
@@ -60,4 +60,4 @@ class HashAlgo_SHA384 : public HashAlgo_SHA512
     static std::vector<uint8_t> calculate(const std::vector<uint8_t>& data);
 };
 
-#endif  // TLS_CLIENT_CRYPTO_HASH_SHA384_H
+#endif  // LIBCPPTLS_CRYPTO_HASH_SHA384_H

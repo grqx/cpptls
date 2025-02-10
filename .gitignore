@@ -3,3 +3,6 @@ build/
 r.hex
 *.swp
 **/a.out
+/*.cpp
+/*.c
+/*.py

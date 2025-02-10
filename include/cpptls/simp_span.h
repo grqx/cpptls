@@ -1,5 +1,5 @@
-#ifndef TLS_CLIENT_SIMPLE_SPAN_H
-#define TLS_CLIENT_SIMPLE_SPAN_H
+#ifndef LIBCPPTLS_SIMPLE_SPAN_H
+#define LIBCPPTLS_SIMPLE_SPAN_H
 #include <cstddef>
 
 template <typename T>

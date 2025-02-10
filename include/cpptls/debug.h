@@ -1,5 +1,5 @@
-#ifndef TLS_CLIENT_DEBUG_H
-#define TLS_CLIENT_DEBUG_H
+#ifndef LIBCPPTLS_DEBUG_H
+#define LIBCPPTLS_DEBUG_H
 
 #include <cstdint>
 #include <functional>
@@ -79,35 +79,43 @@ inline uint8_t parseHexDigits_(char c)
         return UINT8_MAX;
 }
 
-inline std::vector<uint8_t> parseBytesArray(const std::string &str)
+inline std::vector<uint8_t> parseBytesArray(std::string_view str)
 {
     std::vector<uint8_t> ret;
-    for (size_t i = 0; i < str.size(); i += 2) {
-        char d1 = str.at(i);
-        if (d1 == ' ' || d1 == '\n' || d1 == '\r') continue;
-        if (i + 1 >= str.size()) {
-            std::cerr << "Redundant character '" << d1 << "' at the end of the string!\n";
-            break;
-        }
-        char d2 = str.at(i + 1);
-        if (d2 == ' ' || d2 == '\n' || d2 == '\r') {
-            i++;
-            if (i + 1 >= str.size()) {
-                std::cerr << "Redundant character '" << d2 << "' at the end of the string!\n";
-                break;
+    uint8_t cur = 0;
+    bool hi = true;
+    for (auto &&c : str)
+        if (std::isxdigit(c)) {
+            if (hi)
+                cur = parseHexDigits_(c);
+            else {
+                cur = cur * 16 + parseHexDigits_(c);
+                ret.push_back(cur);
             }
-            d2 = str.at(i + 1);
+            hi = !hi;
         }
+    return ret;
+}
 
-        if (!std::isxdigit(d1)) {
-            std::cerr << '\'' << d1 << "' is not a hex digit";
-            break;
-        }
-        if (!std::isxdigit(d2)) {
-            std::cerr << '\'' << d2 << "' is not a hex digit";
-            break;
-        }
-        ret.push_back((parseHexDigits_(d1) << 4) + parseHexDigits_(d2));
+namespace BytesLiterals {
+std::vector<uint8_t> operator"" _b(const char* str, size_t len) {
+    return std::vector<uint8_t>(str, str + len);
+}
+// hex stream
+std::vector<uint8_t> operator"" _hs(const char* str, size_t len) {
+    return parseBytesArray({str, len});
+}
+};
+
+inline std::string genCStyleArray(const std::vector<uint8_t> &vec)
+{
+    constexpr static auto m = "0123456789ABCDEF";
+    std::string ret;
+    for (auto &&c : vec) {
+        ret += "0x";
+        ret += m[(c >> 4) & 0x0F];
+        ret += m[c & 0x0F];
+        ret += ", ";
     }
     return ret;
 }
