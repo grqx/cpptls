@@ -1,6 +1,7 @@
 #include <cpptls/debug.h>
 #include <cpptls/tls.h>
 #include <cpptls/tls_memory.h>
+#include <cpptls/crypto/hash/sha256.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <openssl/err.h>
@@ -352,7 +353,7 @@ int main()
             SSL_get_server_random(ssl_, seed.data(), 32);
             SSL_get_client_random(ssl_, seed.data() + 32, 32);
             auto kblock = TLS_PRF(Debugging::parseBytesArray(ln),
-                "key expansion"s, seed, 104, SHA256_hashinfo);
+                "key expansion"s, seed, 104, HashAlgo_SHA256::hi);
             Debugging::pu8Vec(kblock, 8, true, "kblock");
             std::vector<uint8_t> cwkey {kblock.data() + 64, kblock.data() + 80};
             Debugging::pu8Vec(cwkey, 8, true, "cwkey");

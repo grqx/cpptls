@@ -7,19 +7,19 @@
 #include <cstdint>
 #include <vector>
 
-TLS_CLIENT_API
+LIBCPPTLS_API
 std::vector<uint8_t> encryptAES_128_CBC(BlockOrStreamEncFnArgsType);
-TLS_CLIENT_API
+LIBCPPTLS_API
 std::vector<uint8_t> decryptAES_128_CBC(BlockOrStreamDecFnArgsType);
 
-TLS_CLIENT_API
+LIBCPPTLS_API
 std::vector<uint8_t> encryptAES_256_CBC(BlockOrStreamEncFnArgsType);
-TLS_CLIENT_API
+LIBCPPTLS_API
 std::vector<uint8_t> decryptAES_256_CBC(BlockOrStreamDecFnArgsType);
 
-TLS_CLIENT_API
+LIBCPPTLS_API
 std::vector<uint8_t> encryptAES_128_GCM(AEADEncFnArgsType);
-TLS_CLIENT_API
+LIBCPPTLS_API
 std::vector<uint8_t> decryptAES_128_GCM(AEADDecFnArgsType);
 
 #endif

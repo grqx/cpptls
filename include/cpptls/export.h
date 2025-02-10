@@ -2,15 +2,15 @@
 #define LIBCPPTLS_EXPORT_H
 
 #ifdef _WIN32
-# ifdef LIBTLS_STATIC
-#  define TLS_CLIENT_API
+# ifdef LIBCPPTLS_STATIC
+#  define LIBCPPTLS_API
 # elif defined(LIBTLS_EXPORTS)
-#  define TLS_CLIENT_API __declspec(dllexport)
+#  define LIBCPPTLS_API __declspec(dllexport)
 # else
-#  define TLS_CLIENT_API __declspec(dllimport)
+#  define LIBCPPTLS_API __declspec(dllimport)
 # endif
 #else  // ifdef _WIN32
-# define TLS_CLIENT_API
+# define LIBCPPTLS_API
 #endif
 
 

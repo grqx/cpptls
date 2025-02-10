@@ -1,6 +1,7 @@
 #ifndef LIBCPPTLS_CRYPTO_CIPHER_SUITE_H
 #define LIBCPPTLS_CRYPTO_CIPHER_SUITE_H
 
+#include <cpptls/export.h>
 #include <cpptls/crypto/bulk.h>
 #include <cpptls/crypto/hash.h>
 #include <cpptls/crypto/mac.h>
@@ -13,10 +14,10 @@ enum class CipherSuite : uint16_t {
     TLS_RSA_WITH_AES_128_GCM_SHA256 = 0x009c,
 };
 
-struct KexInfo {
+struct LIBCPPTLS_API KexInfo {
 };
 
-struct CipherSuiteInfo {
+struct LIBCPPTLS_API CipherSuiteInfo {
     KexInfo ki;
     CipherInfo ci;
     MACInfo mi;
@@ -24,8 +25,7 @@ struct CipherSuiteInfo {
     size_t verifyDataLength = 12;
 };
 
-extern HashInfo SHA256_hashinfo;
-
+LIBCPPTLS_API
 CipherSuiteInfo getCipherSuiteInfo(const CipherSuite &cipherSuite);
 
 #endif

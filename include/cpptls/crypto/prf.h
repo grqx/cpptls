@@ -31,6 +31,7 @@
  * of the final iteration will then be discarded, leaving 80 bytes of
  * output data.
  */
+LIBCPPTLS_API
 std::vector<uint8_t> TLS_P_hash(const std::vector<uint8_t> &secret,
                                 const std::vector<uint8_t> &seed, int len, const HashInfo &PRFhi)
 {
@@ -70,6 +71,7 @@ std::vector<uint8_t> TLS_P_hash(const std::vector<uint8_t> &secret,
  *
  *   73 6C 69 74 68 79 20 74 6F 76 65 73
  */
+LIBCPPTLS_API
 std::vector<uint8_t> TLS_PRF(const std::vector<uint8_t> &secret, std::string label,
                              const std::vector<uint8_t> &seed, int len, const HashInfo &PRFhi)
 {

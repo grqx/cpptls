@@ -1,13 +1,14 @@
 #ifndef LIBCPPTLS_TLS_EXCEPTIONS_H
 #define LIBCPPTLS_TLS_EXCEPTIONS_H
 
+#include <cpptls/export.h>
+#include <cpptls/tls_types.h>
+
 #include <optional>
 #include <stdexcept>
 
-#include "tls_types.h"
-
 // base class for various tls errors
-class TLS_BaseError : public std::runtime_error
+class LIBCPPTLS_API TLS_BaseError : public std::runtime_error
 {
    public:
     TLS_BaseError(const std::string &s = "TLS error") : runtime_error(s) {}
@@ -24,7 +25,7 @@ class TLS_BaseError : public std::runtime_error
     virtual ~TLS_BaseError() = default;
 };
 
-class TLS_DecodeError : public TLS_BaseError
+class LIBCPPTLS_API TLS_DecodeError : public TLS_BaseError
 {
    public:
     template <typename... Args>
@@ -38,7 +39,7 @@ class TLS_DecodeError : public TLS_BaseError
 };
 
 // throw on received alert
-class TLS_AlertError : public TLS_BaseError
+class LIBCPPTLS_API TLS_AlertError : public TLS_BaseError
 {
    private:
     template <typename... Args>
@@ -75,7 +76,7 @@ class TLS_AlertError : public TLS_BaseError
     }
 };
 
-class TLS_NotImplemented : public TLS_BaseError
+class LIBCPPTLS_API TLS_NotImplemented : public TLS_BaseError
 {
    public:
     template <typename... Args>

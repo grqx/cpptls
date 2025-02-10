@@ -131,5 +131,7 @@ std::vector<uint8_t> HashAlgo_SHA384::calculate(const std::vector<uint8_t>& data
     HashAlgo_SHA512 sha512;
     sha512.update(data);
     auto fullDigest = sha512.digest();
-    return std::vector<uint8_t>(fullDigest.begin(), fullDigest.begin() + 48);
+    std::vector<uint8_t> ret;
+    ret.assign(fullDigest.begin(), fullDigest.begin() + 48);
+    return ret;
 }

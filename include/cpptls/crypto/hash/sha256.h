@@ -1,5 +1,7 @@
 #ifndef LIBCPPTLS_CRYPTO_HASH_SHA256_H
 #define LIBCPPTLS_CRYPTO_HASH_SHA256_H
+#include <cpptls/crypto/hash.h>
+#include <cpptls/export.h>
 
 #include <array>
 #include <cstdint>
@@ -7,7 +9,7 @@
 #include <string_view>
 #include <vector>
 
-class HashAlgo_SHA256
+class LIBCPPTLS_API HashAlgo_SHA256
 {
    public:
     HashAlgo_SHA256();
@@ -18,6 +20,7 @@ class HashAlgo_SHA256
     std::vector<uint8_t> digest();
     static std::vector<uint8_t> calculate(const std::vector<uint8_t> &data);
     static constexpr size_t BlockSize = 64;  // 512 bits
+    static constexpr HashInfo hi{calculate, BlockSize};
 
    private:
     static constexpr size_t HashValuesSize = 8;  // SHA256 hash is 256 bits (8 x 32-bit values)

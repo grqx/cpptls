@@ -3,7 +3,7 @@
 
 #include <cpptls/crypto/hash.h>
 
-struct MACInfo {
+struct LIBCPPTLS_API MACInfo {
     size_t macLength;
     size_t macKeyLength;
     HashInfo MACHashInfo;

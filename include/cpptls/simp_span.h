@@ -1,9 +1,12 @@
 #ifndef LIBCPPTLS_SIMPLE_SPAN_H
 #define LIBCPPTLS_SIMPLE_SPAN_H
+
+#include <cpptls/export.h>
+
 #include <cstddef>
 
 template <typename T>
-class SimpSpan
+class LIBCPPTLS_API SimpSpan
 {
    private:
     T *data_;

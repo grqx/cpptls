@@ -1,5 +1,7 @@
 #ifndef LIBCPPTLS_CRYPTO_HASH_SHA512_H
 #define LIBCPPTLS_CRYPTO_HASH_SHA512_H
+#include <cpptls/crypto/hash.h>
+#include <cpptls/export.h>
 
 #include <array>
 #include <cstdint>
@@ -7,7 +9,7 @@
 #include <string_view>
 #include <vector>
 
-class HashAlgo_SHA512
+class LIBCPPTLS_API HashAlgo_SHA512
 {
    public:
     HashAlgo_SHA512();
@@ -18,6 +20,7 @@ class HashAlgo_SHA512
     std::vector<uint8_t> digest();
     static std::vector<uint8_t> calculate(const std::vector<uint8_t>& data);
     static constexpr size_t BlockSize = 128;  // 1024 bits for SHA-512
+    static constexpr HashInfo hi{calculate, BlockSize};
 
    private:
     static constexpr size_t HashValuesSize = 8;
@@ -53,11 +56,12 @@ class HashAlgo_SHA512
     void processBlock(const std::vector<uint8_t>& block);
 };
 
-class HashAlgo_SHA384 : public HashAlgo_SHA512
+class LIBCPPTLS_API HashAlgo_SHA384 : HashAlgo_SHA512
 {
    public:
     using HashAlgo_SHA512::BlockSize;
     static std::vector<uint8_t> calculate(const std::vector<uint8_t>& data);
+    static constexpr HashInfo hi{calculate, BlockSize};
 };
 
 #endif  // LIBCPPTLS_CRYPTO_HASH_SHA384_H

@@ -1,16 +1,18 @@
 #ifndef LIBCPPTLS_CRYPTO_BULK_H
 #define LIBCPPTLS_CRYPTO_BULK_H
 
+#include <cpptls/export.h>
+
 #include <cstdint>
 #include <vector>
 
-struct BlockOrStreamEncFnArgsType {
+struct LIBCPPTLS_API BlockOrStreamEncFnArgsType {
     const std::vector<uint8_t> &key;
     const std::vector<uint8_t> &iv;
     const std::vector<uint8_t> &data;
 };
 typedef std::vector<uint8_t> (*BlockOrStreamEncFnType)(BlockOrStreamEncFnArgsType args);
-struct AEADEncFnArgsType {
+struct LIBCPPTLS_API AEADEncFnArgsType {
     const std::vector<uint8_t> &key;
     // nonce (explicit), random and is sent explicitly
     // ought to be recordIVLength bytes
@@ -23,13 +25,13 @@ struct AEADEncFnArgsType {
 };
 typedef std::vector<uint8_t> (*AEADEncFnType)(AEADEncFnArgsType args);
 
-struct BlockOrStreamDecFnArgsType {
+struct LIBCPPTLS_API BlockOrStreamDecFnArgsType {
     const std::vector<uint8_t> &key;
     const std::vector<uint8_t> &iv;
     const std::vector<uint8_t> &encryptedData;
 };
 typedef std::vector<uint8_t> (*BlockOrStreamDecFnType)(BlockOrStreamDecFnArgsType args);
-struct AEADDecFnArgsType {
+struct LIBCPPTLS_API AEADDecFnArgsType {
     const std::vector<uint8_t> &key;
     // nonce (explicit), random and is sent explicitly
     // ought to be recordIVLength bytes
@@ -42,7 +44,7 @@ struct AEADDecFnArgsType {
 };
 typedef std::vector<uint8_t> (*AEADDecFnType)(AEADDecFnArgsType args);
 
-struct CipherInfo {
+struct LIBCPPTLS_API CipherInfo {
     union EncFnUnionType {
         BlockOrStreamEncFnType bos;
         AEADEncFnType aead;

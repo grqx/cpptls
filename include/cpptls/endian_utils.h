@@ -5,7 +5,8 @@
 #include <cstdint>
 #include <type_traits>
 
-constexpr auto UINT24_MAX = 0xFFFFFF;
+LIBCPPTLS_API
+constexpr inline auto UINT24_MAX = 0xFFFFFF;
 
 template <typename T>
 struct identity_type {

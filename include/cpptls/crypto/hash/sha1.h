@@ -8,8 +8,8 @@
 #include <cstdint>
 #include <vector>
 
-TLS_CLIENT_API
+LIBCPPTLS_API
 std::vector<uint8_t> SHA1_calculate(const std::vector<uint8_t> &data);
-HashInfo SHA1_hi{SHA1_calculate, 64};
+constexpr static HashInfo SHA1_hi{SHA1_calculate, 64};
 
 #endif

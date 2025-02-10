@@ -5,8 +5,6 @@
 #include <cpptls/crypto/hash/sha512.h>
 #include <cpptls/macros.h>
 
-HashInfo SHA256_hashinfo{HashAlgo_SHA256::calculate, HashAlgo_SHA256::BlockSize};
-
 CipherSuiteInfo getCipherSuiteInfo(const CipherSuite &cipherSuite)
 {
     constexpr static KexInfo RSA_KI{};
@@ -24,18 +22,18 @@ CipherSuiteInfo getCipherSuiteInfo(const CipherSuite &cipherSuite)
     constexpr static MACInfo SHA1{
         20,
         20,
-        {HashAlgo_SHA1::calculate, HashAlgo_SHA1::BlockSize},
+        SHA1_hi,
     };
     constexpr static MACInfo SHA256{
         32,
         32,
-        {HashAlgo_SHA256::calculate, HashAlgo_SHA256::BlockSize},
+        HashAlgo_SHA256::hi,
     };
     // NOTE: when mi == SHA384 or cipherSuite ends with _SHA384, PRFHashInfo == SHA384
     constexpr static MACInfo SHA384{
         48,
         64,
-        {HashAlgo_SHA384::calculate, HashAlgo_SHA384::BlockSize},
+        HashAlgo_SHA384::hi,
     };
 
     if (cipherSuite == CipherSuite::TLS_RSA_WITH_AES_128_CBC_SHA)

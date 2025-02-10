@@ -32,12 +32,13 @@ enum class ContentType : uint8_t {
     Heartbeat = 0x18
 };
 
+LIBCPPTLS_API
 inline bool validateContentType(ContentType ct)
 {
     return ContentType::ChangeCipherSpec <= ct && ct <= ContentType::Heartbeat;
 }
 
-struct TLSPlaintext {
+struct LIBCPPTLS_API TLSPlaintext {
     std::vector<uint8_t> realCont;
     ContentType contTyp;
     TLS_Version recordVersion;
@@ -55,6 +56,7 @@ enum class HandshakeType : uint16_t {
 };
 
 // TODO
+LIBCPPTLS_API
 inline bool validateHandshakeType(HandshakeType ht)
 {
     return true;
@@ -63,7 +65,7 @@ inline bool validateHandshakeType(HandshakeType ht)
 // length of a minimum TLS handshake protocol TLSInnerText, i.e. 0xXX00 0000
 constexpr auto MIN_HANDSHAKE_PACKET_LEN = 4;
 
-class TLS_Handshake final
+class LIBCPPTLS_API TLS_Handshake final
 {
    public:
     HandshakeType m_ht;
@@ -230,7 +232,7 @@ enum class TLS_State_ {
     Error
 };
 
-class TLS_Alert final : public std::exception
+class LIBCPPTLS_API TLS_Alert final : public std::exception
 {
    private:
     TLS_AlertCode m_aCode;
@@ -261,6 +263,6 @@ class TLS_Alert final : public std::exception
     }
 };
 
-class TLS_Session;
+class LIBCPPTLS_API TLS_Session;
 
 #endif

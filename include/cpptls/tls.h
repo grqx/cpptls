@@ -4,7 +4,7 @@
 #include <cpptls/crypto/cipher_suite.h>
 #include <cpptls/crypto/prf.h>
 #include <cpptls/endian_utils.h>
-#include <cpptls/tls_cert.h>
+#include <cpptls/crypto/cert.h>
 #include <cpptls/tls_exceptions.h>
 #include <cpptls/tls_genrand.h>
 #include <cpptls/tls_types.h>
@@ -22,7 +22,7 @@
 #include "debug.h"
 int main();
 
-class TLS_CLIENT_API TLS_Session
+class LIBCPPTLS_API TLS_Session
 {
    private:
     std::vector<uint8_t> m_sessionID;
@@ -629,7 +629,7 @@ class TLS_CLIENT_API TLS_Session
  *    into a single TLSPlaintext record, or a single message MAY be
  *    fragmented across several records).
  */
-TLS_CLIENT_API
+LIBCPPTLS_API
 [[nodiscard]] std::list<std::vector<uint8_t>> TLS_composeRecordLayer(const TLSPlaintext &cont)
 {
     size_t packetLen_ = cont.realCont.size();
@@ -653,12 +653,12 @@ TLS_CLIENT_API
     return {TLSmsg};
 }
 
-struct TLS_CLIENT_API TLS_parseRecordLayerResult_ {
+struct LIBCPPTLS_API TLS_parseRecordLayerResult_ {
     std::list<TLSPlaintext> parsedContent;
     size_t parsedBytes;
 };
 
-TLS_CLIENT_API
+LIBCPPTLS_API
 TLS_parseRecordLayerResult_ TLS_parseRecordLayer(const std::vector<uint8_t> &packet)
 {
     std::cout << "packet of " << packet.size() << " bytes\n";
