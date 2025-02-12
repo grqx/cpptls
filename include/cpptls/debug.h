@@ -38,35 +38,6 @@ inline void pu8Vec(const U8CONTAINER_ &u8vec, size_t alignTo = 8, bool addLSep =
     if (addLSep) dest << '\n';
 }
 
-extern "C" {
-DEPRECATION_START
-inline size_t hexToBytes(const char *hex, unsigned char *buffer, size_t bufferSize)
-{
-    size_t byteCount = 0;
-
-    for (size_t i = 0; hex[i] != '\0'; ++i) {
-        if (hex[i] == ' ') {
-            continue;
-        }
-        if (!isxdigit(hex[i]) || !isxdigit(hex[i + 1])) {
-            fprintf(stderr, "Invalid hex character: %c%c\n", hex[i], hex[i + 1]);
-            exit(1);
-        }
-        if (byteCount >= bufferSize) {
-            fprintf(stderr, "Buffer overflow\n");
-            exit(1);
-        }
-        unsigned int value;
-        sscanf(&hex[i], "%2x", &value);
-        buffer[byteCount++] = (unsigned char)value;
-        ++i;  // Skip the second hex digit
-    }
-
-    return byteCount;
-}
-DEPRECATION_END
-}  // extern "C"
-
 inline uint8_t parseHexDigits_(char c)
 {
     if (std::isdigit(c))

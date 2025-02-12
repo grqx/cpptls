@@ -7,17 +7,17 @@
 #include <string>
 #include <iomanip>
 
+constexpr auto hex = "0123456789abcdef";
+
 int main() {
     auto phex = [](std::vector<uint8_t> v){
         for (auto &&c : v)
         {
-            const char *hex = "0123456789abcdef";
             std::cout << hex[c>>4 & 0xf] << hex[c & 0xf];
         }
     };
-    for (int i = 0; i < 10; ++i) {
-        std::string str;
-        std::cin >> str;
+    std::string str;
+    while (std::cin >> str) {
         HashAlgo_SHA512 s512;
         s512.update(str);
         std::cout << "SHA512 digest of " << std::quoted(str) << " is: " << s512.hexdigest() << '\n';

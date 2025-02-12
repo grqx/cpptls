@@ -123,15 +123,9 @@ std::vector<uint8_t> encryptAES_128_GCM(AEADEncFnArgsType args)
         throw std::invalid_argument("nonceExplicit size must be 8 bytes for AES-GCM");
 
     // Construct the 12-byte nonce: implicit (writeIV, 4 bytes) || explicit (nonceExplicit, 8 bytes)
-    std::vector<uint8_t> nonce(16);
+    std::vector<uint8_t> nonce(12);
     std::copy(args.writeIV.begin(), args.writeIV.end(), nonce.begin());
     std::copy(args.nonceExplicit.begin(), args.nonceExplicit.end(), nonce.begin() + 4);
-    // again, some1 said that 000001 is appended to the nonce to make it 128bit
-    int idx = 12;
-    nonce[idx++] = 0;
-    nonce[idx++] = 0;
-    nonce[idx++] = 0;
-    nonce[idx++] = 1;
 
     unique_ptr_with_fnptr_deleter<EVP_CIPHER_CTX> ctx(
         EVP_CIPHER_CTX_new(),
@@ -203,15 +197,9 @@ std::vector<uint8_t> decryptAES_128_GCM(AEADDecFnArgsType args)
     std::vector<uint8_t> tag(args.encryptedData.begin() + ciphertext_len, args.encryptedData.end());
 
     // Construct the 12-byte nonce: implicit (readIV, 4 bytes) || explicit (nonceExplicit, 8 bytes)
-    std::vector<uint8_t> nonce(16);
+    std::vector<uint8_t> nonce(12);
     std::copy(args.readIV.begin(), args.readIV.end(), nonce.begin());
     std::copy(args.nonceExplicit.begin(), args.nonceExplicit.end(), nonce.begin() + 4);
-    // again, some1 said that 000001 is appended to the nonce to make it 128bit
-    int idx = 12;
-    nonce[idx++] = 0;
-    nonce[idx++] = 0;
-    nonce[idx++] = 0;
-    nonce[idx++] = 1;
 
     unique_ptr_with_fnptr_deleter<EVP_CIPHER_CTX> ctx(
         EVP_CIPHER_CTX_new(),

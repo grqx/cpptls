@@ -56,22 +56,21 @@ inline constexpr bool is_valid_endian_conversion_subject_v =
 
 // copy to big endian, but dest_t must be a ptr
 template <typename SRC_T, typename DEST_T,
-          typename = std::enable_if_t<is_valid_endian_conversion_subject_v<std::decay_t<SRC_T>>>>
-void copy_to_ptr_big_endian(SRC_T &&src, DEST_T *dest, size_t bytes = sizeof(std::decay_t<SRC_T>))
+          typename = std::enable_if_t<is_valid_endian_conversion_subject_v<SRC_T>>>
+void copy_to_ptr_big_endian(const SRC_T &src, DEST_T *dest, size_t bytes = sizeof(SRC_T))
 {
-    if (bytes > sizeof(std::decay_t<SRC_T>)) bytes = sizeof(std::decay_t<SRC_T>);
-    auto hostVal = static_cast<try_get_underlying_unsigned<std::decay_t<SRC_T>>>(src);
+    if (bytes > sizeof(SRC_T)) bytes = sizeof(SRC_T);
+    auto hostVal = static_cast<try_get_underlying_unsigned<SRC_T>>(src);
     auto ptr = reinterpret_cast<uint8_t *>(dest);
     for (decltype(bytes) offset = 0; offset < bytes; offset++)
-        *(ptr + offset) = (hostVal >> 8 * (bytes - 1 - offset)) & 0xFF;
+        ptr[offset] = (hostVal >> 8 * (bytes - 1 - offset)) & 0xFF;
 }
 
 template <typename SRC_T>
-auto to_big_endian(SRC_T &&src, size_t bytes = sizeof(std::decay_t<SRC_T>))
+auto to_big_endian(const SRC_T &src, const size_t &bytes = sizeof(SRC_T))
 {
-    using RET_T = try_get_underlying_unsigned<std::decay_t<SRC_T>>;
-    RET_T ret = 0;
-    copy_to_ptr_big_endian<decltype(src)>(std::forward<decltype(src)>(src), &ret, bytes);
+    try_get_underlying_unsigned<SRC_T> ret = 0;
+    copy_to_ptr_big_endian<SRC_T>(src, &ret, bytes);
     return ret;
 }
 

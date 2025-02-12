@@ -6,8 +6,10 @@
 #include <cpptls/endian_utils.h>
 #include <cpptls/crypto/cert.h>
 #include <cpptls/tls_exceptions.h>
+#include <cpptls/tls_extensions.h>
 #include <cpptls/tls_genrand.h>
 #include <cpptls/tls_types.h>
+#include <cpptls/unique_container.h>
 #include <cpptls/export.h>
 
 #include <cstdint>
@@ -31,6 +33,7 @@ class LIBCPPTLS_API TLS_Session
     std::vector<uint8_t> m_serverPubKey;
     std::vector<uint8_t> m_preMasterSecret;
     std::vector<uint8_t> m_masterSecret;
+    UniqueContainer<std::unique_ptr<TLS_Extension>, std::vector> m_exts;
     mutable std::optional<CipherSuiteInfo> m_csInfo;
     const CipherSuiteInfo &getCSInfo() const noexcept
     {
@@ -157,11 +160,12 @@ class LIBCPPTLS_API TLS_Session
     }
 
     TLS_Session(const TLS_Version &version, const std::list<CipherSuite> &css,
-                const std::list<CompressionMethod> &cms)
-        : m_vsn(version)
+                const std::list<CompressionMethod> &cms, UniqueContainer<std::unique_ptr<TLS_Extension>, std::vector> &&exts = {})
+        : m_vsn(version), m_exts(std::move(exts))
     {
         TLS_setCipherSuites(css);
         TLS_setCompressionMethods(cms);
+        if (m_vsn == TLS_Version::TLS_1_3) m_exts.emplace_back(std::move(std::make_unique<TLSExt_SupportedVersions>(m_vsn)));
     }
 
     std::vector<uint8_t> TLS_generateClientRandom()
@@ -222,8 +226,23 @@ class LIBCPPTLS_API TLS_Session
 
         // Extensions, TODO
         // do not need to write extension length when there are no extensions
-        // stdcopy_to_big_endian(static_cast<uint16_t>(0), std::back_inserter(vec),
-        // 2);
+        if (!m_exts.empty()) {
+            size_t extsSize = 0;
+            for (auto &&ext : m_exts) {
+                auto r = ext->serialiseInto();
+                if (r >= 0) extsSize += r;
+                else throw TLS_Alert(TLS_AlertCode::InternalError, true);
+            }
+            auto idx = vec.size();
+            vec.resize(idx + 2 + extsSize);
+            copy_to_ptr_big_endian(extsSize, vec.data() + idx, 2);
+            idx += 2;
+            for (auto &&ext : m_exts) {
+                auto r = ext->serialiseInto(vec.data() + idx);
+                if (r >= 0) idx += r;
+                else throw TLS_Alert(TLS_AlertCode::InternalError, true);
+            }
+        }
 
         // vec[1, 2, 3]: length of the rest of the packet
         size_t pktSize = vec.size() - 4;
@@ -475,8 +494,10 @@ class LIBCPPTLS_API TLS_Session
             */
             // auto nonceExplicit = genRand(getCSInfo().ci.recordIVLength);  // SecurityParameters.record_iv_length
             // some1 said that the nonce_explicit should be seq num
+            // some1 said that 000001 is appended to the nonce to make it 128bit
             std::vector<uint8_t> nonceExplicit(getCSInfo().ci.recordIVLength);
-            copy_to_ptr_big_endian(m_seqNum - 1, nonceExplicit.data(), getCSInfo().ci.recordIVLength);  // SecurityParameters.record_iv_length
+            fillRand(nonceExplicit, nonceExplicit.begin(), nonceExplicit.begin() + getCSInfo().ci.recordIVLength - 3);
+            copy_to_ptr_big_endian(m_seqNum - 1, nonceExplicit.data() + getCSInfo().ci.recordIVLength - 3, 3);  // SecurityParameters.record_iv_length
             /*
              * AEADEncrypted = AEAD-Encrypt(write_key, nonce, plaintext,
              *                  additional_data)

@@ -77,6 +77,9 @@ int main()
             {
                 CompressionMethod::NULL_,
             },
+            {
+                std::make_unique<TLSExt_ServerName>(hostname),
+            },
         };
         auto ch = tlss.TLS_writeClientHello();
         auto res = TLS_composeRecordLayer(ch);
@@ -141,7 +144,8 @@ int main()
                 auto bytes = recv(socket_, buf_.data(), buf_.size(), 0);
                 if (bytes <= 0) {
                     std::cerr << "Failed to receive response\n";
-                    perror("recv");
+                    if (bytes < 0)
+                        perror("recv");
                     return EXIT_FAILURE;
                 }
                 buf_.resize(bytes);
@@ -332,7 +336,7 @@ int main()
     unique_ptr_with_deleter<SSL_CTX> ctx{create_context(), SSL_CTX_free};
 
     if (SSL_CTX_set_min_proto_version(ctx.get(), TLS1_2_VERSION) != 1 ||
-        SSL_CTX_set_max_proto_version(ctx.get(), TLS1_2_VERSION) != 1) {
+        SSL_CTX_set_max_proto_version(ctx.get(), TLS1_3_VERSION) != 1) {
         std::cerr << "Failed to set TLS version to TLSv1.2\n";
         ERR_print_errors_fp(stderr);
         return EXIT_FAILURE;
