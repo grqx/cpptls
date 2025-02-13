@@ -6,3 +6,4 @@ r.hex
 /*.cpp
 /*.c
 /*.py
+tmp/

@@ -336,7 +336,7 @@ int main()
     unique_ptr_with_deleter<SSL_CTX> ctx{create_context(), SSL_CTX_free};
 
     if (SSL_CTX_set_min_proto_version(ctx.get(), TLS1_2_VERSION) != 1 ||
-        SSL_CTX_set_max_proto_version(ctx.get(), TLS1_3_VERSION) != 1) {
+        SSL_CTX_set_max_proto_version(ctx.get(), TLS1_2_VERSION) != 1) {
         std::cerr << "Failed to set TLS version to TLSv1.2\n";
         ERR_print_errors_fp(stderr);
         return EXIT_FAILURE;

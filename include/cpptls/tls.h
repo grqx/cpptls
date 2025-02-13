@@ -138,7 +138,7 @@ class LIBCPPTLS_API TLS_Session
     uint8_t m_cSChanged = 0;
 
    public:
-    friend int ::main();
+    friend int ::main();  // for debugging only
     const TLS_State_ &getState() const noexcept
     {
         return m_state_;
@@ -161,11 +161,11 @@ class LIBCPPTLS_API TLS_Session
 
     TLS_Session(const TLS_Version &version, const std::list<CipherSuite> &css,
                 const std::list<CompressionMethod> &cms, UniqueContainer<std::unique_ptr<TLS_Extension>, std::vector> &&exts = {})
-        : m_vsn(version), m_exts(std::move(exts))
+        : m_vsn(TLS_Version::TLS_1_2), m_exts(std::move(exts))
     {
         TLS_setCipherSuites(css);
         TLS_setCompressionMethods(cms);
-        if (m_vsn == TLS_Version::TLS_1_3) m_exts.emplace_back(std::move(std::make_unique<TLSExt_SupportedVersions>(m_vsn)));
+        if (version == TLS_Version::TLS_1_3) m_exts.emplace_back(std::move(std::make_unique<TLSExt_SupportedVersions>(m_vsn)));
     }
 
     std::vector<uint8_t> TLS_generateClientRandom()
@@ -254,6 +254,7 @@ class LIBCPPTLS_API TLS_Session
         return {vec, ContentType::Handshake, m_vsn};
     }
 
+    // NOTE: This is not standard conformant, see Appendix D.4. of RFC 5246
     /// @brief parses server hello
     /// @param serverHello const lvalue reference to a TLSPlaintext struct, should
     /// contain the server hello/server hello done packet
@@ -505,6 +506,7 @@ class LIBCPPTLS_API TLS_Session
             // dataToHash = additional_data
             auto enc = getCSInfo().ci.enc.aead({getClientWriteKey(), nonceExplicit, tpt.realCont, dataToHash, getClientWriteIV()});
             auto decd = getCSInfo().ci.dec.aead({getClientWriteKey(), nonceExplicit, enc, dataToHash, getClientWriteIV()});
+            if (enc != decd) throw TLS_Alert(TLS_AlertCode::InternalError, true);
             {
                 Debugging::pu8Vec(dataToHash, 8, true, "AEAD AAD");
                 Debugging::pu8Vec(tpt.realCont, 8, true, "raw data to encrypt");
