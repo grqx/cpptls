@@ -8,7 +8,7 @@
 #include <utility>
 #include <type_traits>
 #include <cstddef>
-// TODO: emplace constructor
+
 template <typename T, template <typename...> typename Container = std::vector>
 class UniqueContainer final : public Container<T> {
 public:
