@@ -1,19 +1,19 @@
-#include <cpptls/crypto/hash/sha512.h>
-#include <cpptls/crypto/hash/sha256.h>
 #include <cpptls/crypto/hash/sha1.h>
+#include <cpptls/crypto/hash/sha256.h>
+#include <cpptls/crypto/hash/sha512.h>
 #include <cpptls/export.h>
 
+#include <iomanip>
 #include <iostream>
 #include <string>
-#include <iomanip>
 
 constexpr auto hex = "0123456789abcdef";
 
-int main() {
-    auto phex = [](std::vector<uint8_t> v){
-        for (auto &&c : v)
-        {
-            std::cout << hex[c>>4 & 0xf] << hex[c & 0xf];
+int main()
+{
+    auto phex = [](std::vector<uint8_t> v) {
+        for (auto &&c : v) {
+            std::cout << hex[c >> 4 & 0xf] << hex[c & 0xf];
         }
     };
     std::string str;

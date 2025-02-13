@@ -1,8 +1,8 @@
 #ifndef LIBCPPTLS_CRYPTO_HASH_SHA1_H
 #define LIBCPPTLS_CRYPTO_HASH_SHA1_H
 
-#include <cpptls/export.h>
 #include <cpptls/crypto/hash.h>
+#include <cpptls/export.h>
 
 #include <cstddef>
 #include <cstdint>

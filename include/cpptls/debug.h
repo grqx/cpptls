@@ -69,14 +69,16 @@ inline std::vector<uint8_t> parseBytesArray(std::string_view str)
 }
 
 namespace BytesLiterals {
-std::vector<uint8_t> operator"" _b(const char* str, size_t len) {
+std::vector<uint8_t> operator"" _b(const char *str, size_t len)
+{
     return std::vector<uint8_t>(str, str + len);
 }
 // hex stream
-std::vector<uint8_t> operator"" _hs(const char* str, size_t len) {
+std::vector<uint8_t> operator"" _hs(const char *str, size_t len)
+{
     return parseBytesArray({str, len});
 }
-};
+};  // namespace BytesLiterals
 
 inline std::string genCStyleArray(const std::vector<uint8_t> &vec)
 {

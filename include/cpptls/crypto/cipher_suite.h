@@ -1,10 +1,10 @@
 #ifndef LIBCPPTLS_CRYPTO_CIPHER_SUITE_H
 #define LIBCPPTLS_CRYPTO_CIPHER_SUITE_H
 
-#include <cpptls/export.h>
 #include <cpptls/crypto/bulk.h>
 #include <cpptls/crypto/hash.h>
 #include <cpptls/crypto/mac.h>
+#include <cpptls/export.h>
 
 enum class CipherSuite : uint16_t {
     TLS_RSA_WITH_AES_128_CBC_SHA = 0x002f,

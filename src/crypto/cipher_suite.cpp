@@ -9,15 +9,12 @@ CipherSuiteInfo getCipherSuiteInfo(const CipherSuite &cipherSuite)
 {
     constexpr static KexInfo RSA_KI{};
 
-    constexpr static auto AES_128_CBC = CipherInfo(
-        encryptAES_128_CBC, decryptAES_128_CBC, 16, 16, 16, 16
-    );
-    constexpr static auto AES_256_CBC = CipherInfo(
-        encryptAES_256_CBC, decryptAES_256_CBC, 32, 16, 16, 16
-    );
-    constexpr static auto AES_128_GCM = CipherInfo(
-        encryptAES_128_GCM, decryptAES_128_GCM, 16, 8, 4
-    );
+    constexpr static auto AES_128_CBC =
+        CipherInfo(encryptAES_128_CBC, decryptAES_128_CBC, 16, 16, 16, 16);
+    constexpr static auto AES_256_CBC =
+        CipherInfo(encryptAES_256_CBC, decryptAES_256_CBC, 32, 16, 16, 16);
+    constexpr static auto AES_128_GCM =
+        CipherInfo(encryptAES_128_GCM, decryptAES_128_GCM, 16, 8, 4);
 
     constexpr static MACInfo SHA1{
         20,

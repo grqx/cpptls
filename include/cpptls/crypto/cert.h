@@ -2,7 +2,6 @@
 #define LIBCPPTLS_CRYPTO_CERT_H
 
 #include <cpptls/export.h>
-
 #include <openssl/err.h>
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
@@ -31,8 +30,7 @@ struct EVP_PKEY_Deleter {
 };
 using EVP_PKEY_Ptr = std::unique_ptr<EVP_PKEY, EVP_PKEY_Deleter>;
 
-inline
-std::vector<uint8_t> encRSA(const std::vector<uint8_t> &cont, const EVP_PKEY_Ptr &pubKey)
+inline std::vector<uint8_t> encRSA(const std::vector<uint8_t> &cont, const EVP_PKEY_Ptr &pubKey)
 {
     EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(pubKey.get(), nullptr);
     if (!ctx) {
@@ -63,8 +61,7 @@ std::vector<uint8_t> encRSA(const std::vector<uint8_t> &cont, const EVP_PKEY_Ptr
     return encryptedData;
 }
 
-inline
-std::vector<uint8_t> serializePublicKey(const EVP_PKEY_Ptr &pubKey)
+inline std::vector<uint8_t> serializePublicKey(const EVP_PKEY_Ptr &pubKey)
 {
     std::vector<uint8_t> keyData;
     int len = i2d_PUBKEY(pubKey.get(), nullptr);  // Get the required length
@@ -83,8 +80,7 @@ std::vector<uint8_t> serializePublicKey(const EVP_PKEY_Ptr &pubKey)
     return keyData;
 }
 
-inline
-EVP_PKEY_Ptr deserializePublicKey(const std::vector<uint8_t> &keyData)
+inline EVP_PKEY_Ptr deserializePublicKey(const std::vector<uint8_t> &keyData)
 {
     const uint8_t *p = keyData.data();
     EVP_PKEY *pubKey = d2i_PUBKEY(nullptr, &p, static_cast<long>(keyData.size()));
@@ -95,8 +91,7 @@ EVP_PKEY_Ptr deserializePublicKey(const std::vector<uint8_t> &keyData)
     return EVP_PKEY_Ptr(pubKey);
 }
 
-inline
-std::vector<X509Ptr> parseCertificates(const std::vector<uint8_t> &certChain)
+inline std::vector<X509Ptr> parseCertificates(const std::vector<uint8_t> &certChain)
 {
     std::vector<X509Ptr> certificates;
     const uint8_t *ptr = certChain.data();
@@ -128,8 +123,7 @@ std::vector<X509Ptr> parseCertificates(const std::vector<uint8_t> &certChain)
     return certificates;
 }
 
-inline
-EVP_PKEY_Ptr getPublicKeyFromCertificate(const X509Ptr &cert)
+inline EVP_PKEY_Ptr getPublicKeyFromCertificate(const X509Ptr &cert)
 {
     EVP_PKEY *pubKey = X509_get_pubkey(cert.get());
     if (!pubKey) {
@@ -139,9 +133,7 @@ EVP_PKEY_Ptr getPublicKeyFromCertificate(const X509Ptr &cert)
     return EVP_PKEY_Ptr(pubKey);
 }
 
-[[nodiscard]]
-inline
-std::vector<uint8_t> getPubKey(const std::vector<uint8_t> &certChain)
+[[nodiscard]] inline std::vector<uint8_t> getPubKey(const std::vector<uint8_t> &certChain)
 {
     EVP_PKEY_Ptr serverPubKey;
     try {

@@ -1,16 +1,16 @@
 #ifndef LIBCPPTLS_TLS_H
 #define LIBCPPTLS_TLS_H
 
+#include <cpptls/crypto/cert.h>
 #include <cpptls/crypto/cipher_suite.h>
 #include <cpptls/crypto/prf.h>
 #include <cpptls/endian_utils.h>
-#include <cpptls/crypto/cert.h>
+#include <cpptls/export.h>
 #include <cpptls/tls_exceptions.h>
 #include <cpptls/tls_extensions.h>
 #include <cpptls/tls_genrand.h>
 #include <cpptls/tls_types.h>
 #include <cpptls/unique_container.h>
-#include <cpptls/export.h>
 
 #include <cstdint>
 #include <ctime>
@@ -117,7 +117,8 @@ class LIBCPPTLS_API TLS_Session
             m_serverWriteIV = {kbb + 2 * getCSInfo().mi.macKeyLength +
                                    2 * getCSInfo().ci.keyMaterial + getCSInfo().ci.fixedIVLength,
                                kbb + 2 * getCSInfo().mi.macKeyLength +
-                                   2 * getCSInfo().ci.keyMaterial + 2 * getCSInfo().ci.fixedIVLength};
+                                   2 * getCSInfo().ci.keyMaterial +
+                                   2 * getCSInfo().ci.fixedIVLength};
         }
         return m_serverWriteIV;
     }
@@ -160,12 +161,14 @@ class LIBCPPTLS_API TLS_Session
     }
 
     TLS_Session(const TLS_Version &version, const std::list<CipherSuite> &css,
-                const std::list<CompressionMethod> &cms, UniqueContainer<std::unique_ptr<TLS_Extension>, std::vector> &&exts = {})
+                const std::list<CompressionMethod> &cms,
+                UniqueContainer<std::unique_ptr<TLS_Extension>, std::vector> &&exts = {})
         : m_vsn(TLS_Version::TLS_1_2), m_exts(std::move(exts))
     {
         TLS_setCipherSuites(css);
         TLS_setCompressionMethods(cms);
-        if (version == TLS_Version::TLS_1_3) m_exts.emplace_back(std::move(std::make_unique<TLSExt_SupportedVersions>(m_vsn)));
+        if (version == TLS_Version::TLS_1_3)
+            m_exts.emplace_back(std::move(std::make_unique<TLSExt_SupportedVersions>(m_vsn)));
     }
 
     std::vector<uint8_t> TLS_generateClientRandom()
@@ -230,8 +233,10 @@ class LIBCPPTLS_API TLS_Session
             size_t extsSize = 0;
             for (auto &&ext : m_exts) {
                 auto r = ext->serialiseInto();
-                if (r >= 0) extsSize += r;
-                else throw TLS_Alert(TLS_AlertCode::InternalError, true);
+                if (r >= 0)
+                    extsSize += r;
+                else
+                    throw TLS_Alert(TLS_AlertCode::InternalError, true);
             }
             auto idx = vec.size();
             vec.resize(idx + 2 + extsSize);
@@ -239,8 +244,10 @@ class LIBCPPTLS_API TLS_Session
             idx += 2;
             for (auto &&ext : m_exts) {
                 auto r = ext->serialiseInto(vec.data() + idx);
-                if (r >= 0) idx += r;
-                else throw TLS_Alert(TLS_AlertCode::InternalError, true);
+                if (r >= 0)
+                    idx += r;
+                else
+                    throw TLS_Alert(TLS_AlertCode::InternalError, true);
             }
         }
 
@@ -426,21 +433,21 @@ class LIBCPPTLS_API TLS_Session
         stdcopy_to_big_endian(tpt.realCont.size(), std::back_inserter(dataToHash), 2);
         if (getCSInfo().ci.blockSize) {  // block or stream cipher
             /*
-            * stream-ciphered struct {
-            *     opaque content[TLSCompressed.length];
-            *     opaque MAC[SecurityParameters.mac_length];
-            * } GenericStreamCipher;
-            *
-            * struct {
-            *     opaque IV[SecurityParameters.record_iv_length];
-            *     block-ciphered struct {
-            *         opaque content[TLSCompressed.length];
-            *         opaque MAC[SecurityParameters.mac_length];
-            *         uint8 padding[GenericBlockCipher.padding_length];
-            *         uint8 padding_length;
-            *     };
-            * } GenericBlockCipher;
-            */
+             * stream-ciphered struct {
+             *     opaque content[TLSCompressed.length];
+             *     opaque MAC[SecurityParameters.mac_length];
+             * } GenericStreamCipher;
+             *
+             * struct {
+             *     opaque IV[SecurityParameters.record_iv_length];
+             *     block-ciphered struct {
+             *         opaque content[TLSCompressed.length];
+             *         opaque MAC[SecurityParameters.mac_length];
+             *         uint8 padding[GenericBlockCipher.padding_length];
+             *         uint8 padding_length;
+             *     };
+             * } GenericBlockCipher;
+             */
             dataToHash.insert(dataToHash.end(), tpt.realCont.begin(), tpt.realCont.end());
             Debugging::pu8Vec(dataToHash, 8, true, "data to hash");
 
@@ -451,7 +458,7 @@ class LIBCPPTLS_API TLS_Session
             dataWithHash.insert(dataWithHash.end(), hash_.begin(), hash_.end());
 
             if (getCSInfo().ci.blockSize > 0) {  // pad if using block cipher
-                /* 
+                /*
                  * padding
                  *    Padding that is added to force the length of the plaintext to be
                  *    an integral multiple of the block cipher's block length.  The
@@ -474,8 +481,8 @@ class LIBCPPTLS_API TLS_Session
                 uint8_t padding_ =
                     getCSInfo().ci.blockSize - (dataWithHash.size() % getCSInfo().ci.blockSize);
                 // random padding
-                padding_ +=
-                    randInt((255U - padding_) / getCSInfo().ci.blockSize) * getCSInfo().ci.blockSize;
+                padding_ += randInt((255U - padding_) / getCSInfo().ci.blockSize) *
+                            getCSInfo().ci.blockSize;
                 dataWithHash.resize(dataWithHash.size() + padding_, padding_ - 1);
             }
             Debugging::pu8Vec(dataWithHash, 8, true, "dataWithHash(after padding)");
@@ -486,26 +493,31 @@ class LIBCPPTLS_API TLS_Session
             return encIV;
         } else {  // AEAD cipher
             /*
-            * struct {
-            *    opaque nonce_explicit[SecurityParameters.record_iv_length];
-            *    aead-ciphered struct {
-            *        opaque content[TLSCompressed.length];
-            *    };
-            * } GenericAEADCipher;
-            */
-            // auto nonceExplicit = genRand(getCSInfo().ci.recordIVLength);  // SecurityParameters.record_iv_length
-            // some1 said that the nonce_explicit should be seq num
-            // some1 said that 000001 is appended to the nonce to make it 128bit
+             * struct {
+             *    opaque nonce_explicit[SecurityParameters.record_iv_length];
+             *    aead-ciphered struct {
+             *        opaque content[TLSCompressed.length];
+             *    };
+             * } GenericAEADCipher;
+             */
+            // auto nonceExplicit = genRand(getCSInfo().ci.recordIVLength);  //
+            // SecurityParameters.record_iv_length some1 said that the nonce_explicit should be seq
+            // num some1 said that 000001 is appended to the nonce to make it 128bit
             std::vector<uint8_t> nonceExplicit(getCSInfo().ci.recordIVLength);
-            fillRand(nonceExplicit, nonceExplicit.begin(), nonceExplicit.begin() + getCSInfo().ci.recordIVLength - 3);
-            copy_to_ptr_big_endian(m_seqNum - 1, nonceExplicit.data() + getCSInfo().ci.recordIVLength - 3, 3);  // SecurityParameters.record_iv_length
+            fillRand(nonceExplicit, nonceExplicit.begin(),
+                     nonceExplicit.begin() + getCSInfo().ci.recordIVLength - 3);
+            copy_to_ptr_big_endian(m_seqNum - 1,
+                                   nonceExplicit.data() + getCSInfo().ci.recordIVLength - 3,
+                                   3);  // SecurityParameters.record_iv_length
             /*
              * AEADEncrypted = AEAD-Encrypt(write_key, nonce, plaintext,
              *                  additional_data)
              */
             // dataToHash = additional_data
-            auto enc = getCSInfo().ci.enc.aead({getClientWriteKey(), nonceExplicit, tpt.realCont, dataToHash, getClientWriteIV()});
-            auto decd = getCSInfo().ci.dec.aead({getClientWriteKey(), nonceExplicit, enc, dataToHash, getClientWriteIV()});
+            auto enc = getCSInfo().ci.enc.aead(
+                {getClientWriteKey(), nonceExplicit, tpt.realCont, dataToHash, getClientWriteIV()});
+            auto decd = getCSInfo().ci.dec.aead(
+                {getClientWriteKey(), nonceExplicit, enc, dataToHash, getClientWriteIV()});
             if (enc != decd) throw TLS_Alert(TLS_AlertCode::InternalError, true);
             {
                 Debugging::pu8Vec(dataToHash, 8, true, "AEAD AAD");
@@ -580,10 +592,10 @@ class LIBCPPTLS_API TLS_Session
         if (getCSInfo().ci.blockSize) {  // block or stream cipher
             // dont hash the dataToHash vector yet
             // we need to copy the decrypted data to the end of it afterwards
-            std::vector<uint8_t> decIV {packet.realCont.begin(),
-                                        packet.realCont.begin() + getCSInfo().ci.recordIVLength};
-            std::vector<uint8_t> decData {packet.realCont.begin() + getCSInfo().ci.recordIVLength,
-                                            packet.realCont.end()};
+            std::vector<uint8_t> decIV{packet.realCont.begin(),
+                                       packet.realCont.begin() + getCSInfo().ci.recordIVLength};
+            std::vector<uint8_t> decData{packet.realCont.begin() + getCSInfo().ci.recordIVLength,
+                                         packet.realCont.end()};
             auto dec = getCSInfo().ci.dec.bos({getServerWriteKey(), decIV, decData});
             if (getCSInfo().ci.blockSize > 0) {  // block cipher, unpad
                 uint8_t padVal = dec.back();
@@ -605,12 +617,14 @@ class LIBCPPTLS_API TLS_Session
         } else {  // AEAD cipher
             // TODO: add this as a property of a AEAD cipher
             auto AEADOverhead = 16;
-            stdcopy_to_big_endian(packet.realCont.size() - AEADOverhead, std::back_inserter(dataToHash), 2);
-            std::vector<uint8_t> decIV {packet.realCont.begin(),
-                                        packet.realCont.begin() + getCSInfo().ci.recordIVLength};
-            std::vector<uint8_t> decData {packet.realCont.begin() + getCSInfo().ci.recordIVLength,
-                                            packet.realCont.end()};
-            auto dec = getCSInfo().ci.dec.aead({getServerWriteKey(), decIV, decData, dataToHash, getServerWriteIV()});
+            stdcopy_to_big_endian(packet.realCont.size() - AEADOverhead,
+                                  std::back_inserter(dataToHash), 2);
+            std::vector<uint8_t> decIV{packet.realCont.begin(),
+                                       packet.realCont.begin() + getCSInfo().ci.recordIVLength};
+            std::vector<uint8_t> decData{packet.realCont.begin() + getCSInfo().ci.recordIVLength,
+                                         packet.realCont.end()};
+            auto dec = getCSInfo().ci.dec.aead(
+                {getServerWriteKey(), decIV, decData, dataToHash, getServerWriteIV()});
             return dec;
         }
     }

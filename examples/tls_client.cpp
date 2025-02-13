@@ -1,8 +1,8 @@
+#include <arpa/inet.h>
+#include <cpptls/crypto/hash/sha256.h>
 #include <cpptls/debug.h>
 #include <cpptls/tls.h>
 #include <cpptls/tls_memory.h>
-#include <cpptls/crypto/hash/sha256.h>
-#include <arpa/inet.h>
 #include <netdb.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -144,8 +144,7 @@ int main()
                 auto bytes = recv(socket_, buf_.data(), buf_.size(), 0);
                 if (bytes <= 0) {
                     std::cerr << "Failed to receive response\n";
-                    if (bytes < 0)
-                        perror("recv");
+                    if (bytes < 0) perror("recv");
                     return EXIT_FAILURE;
                 }
                 buf_.resize(bytes);
@@ -341,7 +340,7 @@ int main()
         ERR_print_errors_fp(stderr);
         return EXIT_FAILURE;
     }
-    SSL_CTX_set_keylog_callback(ctx.get(), [](const SSL* ssl_, const char* line) {
+    SSL_CTX_set_keylog_callback(ctx.get(), [](const SSL *ssl_, const char *line) {
         using namespace std::string_literals;
         std::ostringstream oss;
         oss << line << '\n';
@@ -356,20 +355,22 @@ int main()
             std::vector<uint8_t> seed(64);
             SSL_get_server_random(ssl_, seed.data(), 32);
             SSL_get_client_random(ssl_, seed.data() + 32, 32);
-            auto kblock = TLS_PRF(Debugging::parseBytesArray(ln),
-                "key expansion"s, seed, 104, HashAlgo_SHA256::hi);
+            auto kblock = TLS_PRF(Debugging::parseBytesArray(ln), "key expansion"s, seed, 104,
+                                  HashAlgo_SHA256::hi);
             Debugging::pu8Vec(kblock, 8, true, "kblock");
-            std::vector<uint8_t> cwkey {kblock.data() + 64, kblock.data() + 80};
+            std::vector<uint8_t> cwkey{kblock.data() + 64, kblock.data() + 80};
             Debugging::pu8Vec(cwkey, 8, true, "cwkey");
             std::cout << "cwkey(c): " << Debugging::genCStyleArray(cwkey) << '\n';
-            std::vector<uint8_t> cwiv {kblock.data() + 96, kblock.data() + 100};
+            std::vector<uint8_t> cwiv{kblock.data() + 96, kblock.data() + 100};
             Debugging::pu8Vec(cwiv, 8, true, "cwiv");
             std::cout << "cwiv(c): " << Debugging::genCStyleArray(cwiv) << '\n';
         }
     });
     SSL_CTX_set_cipher_list(ctx.get(), "AES128-GCM-SHA256");
 
-    unique_ptr_with_deleter<SSL> ssl{SSL_new(ctx.get()), [](SSL* ssl_) { if (ssl_) SSL_free(ssl_); }};
+    unique_ptr_with_deleter<SSL> ssl{SSL_new(ctx.get()), [](SSL *ssl_) {
+                                         if (ssl_) SSL_free(ssl_);
+                                     }};
     if (!ssl) {
         std::cerr << "SSL creation failed\n";
         ERR_print_errors_fp(stderr);

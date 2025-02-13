@@ -1,8 +1,8 @@
 #ifndef LIBCPPTLS_CRYPTO_HMAC_H
 #define LIBCPPTLS_CRYPTO_HMAC_H
 
-#include <cpptls/export.h>
 #include <cpptls/crypto/hash.h>
+#include <cpptls/export.h>
 #include <cpptls/macros.h>
 
 #include <cstddef>

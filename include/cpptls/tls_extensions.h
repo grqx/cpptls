@@ -1,23 +1,25 @@
 #ifndef LIBCPPTLS_TLS_EXTENSIONS_H
 #define LIBCPPTLS_TLS_EXTENSIONS_H
 
-#include <cpptls/export.h>
 #include <cpptls/endian_utils.h>
+#include <cpptls/export.h>
 #include <cpptls/macros.h>
 
-#include <vector>
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 #include <stdexcept>
 #include <string_view>
+#include <vector>
 
-class LIBCPPTLS_API TLS_Extension {
-protected:
+class LIBCPPTLS_API TLS_Extension
+{
+   protected:
     // this is to be set by subclasses when initialising TLS_Extension class
     uint16_t m_extensionType = 0x0000;
     constexpr TLS_Extension(const uint16_t &extensionType) : m_extensionType(extensionType) {}
     virtual int serialiseExtension(uint8_t *buf = nullptr) const noexcept = 0;
-public:
+
+   public:
     virtual ~TLS_Extension() = default;
     /*
      * Serialise the extension into the buffer.
@@ -27,23 +29,22 @@ public:
      *  -1 if the extension is too large
      *  the return value of serialiseExtension if less than 0
      */
-    int serialiseInto(uint8_t *buf = nullptr) const noexcept {
-        if (!buf)
-            return 4 + serialiseExtension();
+    int serialiseInto(uint8_t *buf = nullptr) const noexcept
+    {
+        if (!buf) return 4 + serialiseExtension();
         auto s = serialiseExtension();
-        if (s < 0)
-            return s;
+        if (s < 0) return s;
         copy_to_ptr_big_endian(m_extensionType, buf);
-        if (s > UINT16_MAX)
-            return -1;
+        if (s > UINT16_MAX) return -1;
         copy_to_ptr_big_endian(s, buf + 2, 2);
         s = serialiseExtension(buf + 4);
         return s < 0 ? s : 4 + s;
     }
 };
 
-class LIBCPPTLS_API TLSExt_ServerName : public TLS_Extension {
-public:
+class LIBCPPTLS_API TLSExt_ServerName : public TLS_Extension
+{
+   public:
     constexpr static uint16_t extensionType = 0x0000;
     enum class NameType : uint8_t {
         host_name = 0,
@@ -53,15 +54,23 @@ public:
         // this should be serialised
         std::vector<uint8_t> name;
     };
-    TLSExt_ServerName(const std::vector<ServerName> &serverNames) : TLS_Extension(extensionType), m_serverNames(serverNames) {}
-    TLSExt_ServerName(std::string_view sv) : TLS_Extension(extensionType), m_serverNames({{NameType::host_name, {sv.begin(), sv.end()}}}) {}
-private:
+    TLSExt_ServerName(const std::vector<ServerName> &serverNames)
+        : TLS_Extension(extensionType), m_serverNames(serverNames)
+    {
+    }
+    TLSExt_ServerName(std::string_view sv)
+        : TLS_Extension(extensionType),
+          m_serverNames({{NameType::host_name, {sv.begin(), sv.end()}}})
+    {
+    }
+
+   private:
     std::vector<ServerName> m_serverNames;
-    int serialiseExtension(uint8_t *buf = nullptr) const noexcept override {
+    int serialiseExtension(uint8_t *buf = nullptr) const noexcept override
+    {
         if (!buf) {
             size_t cnt = 2;  // server name list length
-            for (auto &&sn : m_serverNames)
-                cnt += 1 + 2 + sn.name.size();
+            for (auto &&sn : m_serverNames) cnt += 1 + 2 + sn.name.size();
             return cnt;
         }
         uintptr_t offset = 2;
@@ -79,15 +88,15 @@ private:
     }
 };
 
-class LIBCPPTLS_API TLSExt_SupportedVersions : public TLS_Extension {
-private:
+class LIBCPPTLS_API TLSExt_SupportedVersions : public TLS_Extension
+{
+   private:
     std::vector<TLS_Version> m_vsns;
-    int serialiseExtension(uint8_t *buf = nullptr) const noexcept override {
+    int serialiseExtension(uint8_t *buf = nullptr) const noexcept override
+    {
         auto size = m_vsns.size() * sizeof(TLS_Version);
-        if (!buf)
-            return 1 + size;
-        if (size > UINT8_MAX)
-            return -2;
+        if (!buf) return 1 + size;
+        if (size > UINT8_MAX) return -2;
         *(buf++) = size;
         for (auto &&vsn : m_vsns) {
             copy_to_ptr_big_endian(vsn, buf, sizeof(TLS_Version));
@@ -95,10 +104,16 @@ private:
         }
         return 1 + size;
     }
-public:
+
+   public:
     constexpr static uint16_t extensionType = 0x0000;
-    TLSExt_SupportedVersions(const std::vector<TLS_Version> &vsns) : TLS_Extension(extensionType), m_vsns(vsns) {}
-    TLSExt_SupportedVersions(const TLS_Version &vsns) : TLS_Extension(extensionType), m_vsns({vsns}) {}
+    TLSExt_SupportedVersions(const std::vector<TLS_Version> &vsns)
+        : TLS_Extension(extensionType), m_vsns(vsns)
+    {
+    }
+    TLSExt_SupportedVersions(const TLS_Version &vsns) : TLS_Extension(extensionType), m_vsns({vsns})
+    {
+    }
 };
 
 #endif

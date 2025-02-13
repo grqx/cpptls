@@ -48,14 +48,14 @@ struct LIBCPPTLS_API CipherInfo {
     union EncFnUnionType {
         BlockOrStreamEncFnType bos;
         AEADEncFnType aead;
-        explicit constexpr EncFnUnionType (BlockOrStreamEncFnType bos) : bos(bos) {}
-        explicit constexpr EncFnUnionType (AEADEncFnType aead) : aead(aead) {}
+        explicit constexpr EncFnUnionType(BlockOrStreamEncFnType bos) : bos(bos) {}
+        explicit constexpr EncFnUnionType(AEADEncFnType aead) : aead(aead) {}
     } enc;
     union DecFnUnionType {
         BlockOrStreamDecFnType bos;
         AEADDecFnType aead;
-        explicit constexpr DecFnUnionType (BlockOrStreamDecFnType bos) : bos(bos) {}
-        explicit constexpr DecFnUnionType (AEADDecFnType aead) : aead(aead) {}
+        explicit constexpr DecFnUnionType(BlockOrStreamDecFnType bos) : bos(bos) {}
+        explicit constexpr DecFnUnionType(AEADDecFnType aead) : aead(aead) {}
     } dec;
     int keyMaterial;
     int recordIVLength;
@@ -65,10 +65,25 @@ struct LIBCPPTLS_API CipherInfo {
     // 0 for AEAD ciphers
     // >0 for block ciphers
     int blockSize;
-    constexpr CipherInfo(BlockOrStreamEncFnType bos, BlockOrStreamDecFnType bosd, int km, int ivs, uint8_t fivl, int bs = -1)
-        : enc(EncFnUnionType{bos}), dec(DecFnUnionType{bosd}), keyMaterial(km), recordIVLength(ivs), fixedIVLength(fivl), blockSize(bs) {}
+    constexpr CipherInfo(BlockOrStreamEncFnType bos, BlockOrStreamDecFnType bosd, int km, int ivs,
+                         uint8_t fivl, int bs = -1)
+        : enc(EncFnUnionType{bos}),
+          dec(DecFnUnionType{bosd}),
+          keyMaterial(km),
+          recordIVLength(ivs),
+          fixedIVLength(fivl),
+          blockSize(bs)
+    {
+    }
     constexpr CipherInfo(AEADEncFnType aead, AEADDecFnType aeadd, int km, int ivs, uint8_t fivl)
-        : enc(EncFnUnionType{aead}), dec(DecFnUnionType{aeadd}), keyMaterial(km), recordIVLength(ivs), fixedIVLength(fivl), blockSize(0) {}
+        : enc(EncFnUnionType{aead}),
+          dec(DecFnUnionType{aeadd}),
+          keyMaterial(km),
+          recordIVLength(ivs),
+          fixedIVLength(fivl),
+          blockSize(0)
+    {
+    }
 };
 
 #endif
