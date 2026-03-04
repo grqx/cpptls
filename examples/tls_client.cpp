@@ -1,5 +1,6 @@
 #include <arpa/inet.h>
 #include <cpptls/crypto/hash/sha256.h>
+#include <cpptls/crypto/bulk/aes.h>
 #include <cpptls/debug.h>
 #include <cpptls/tls.h>
 #include <cpptls/tls_memory.h>
@@ -13,6 +14,7 @@
 #include <functional>
 #include <iostream>
 #include <thread>
+#include "cpptls/crypto/bulk.h"
 
 void *initialize_openssl()
 {
@@ -44,6 +46,27 @@ int main()
     const int port = 443;
 
     std::shared_ptr<void> openssl_raii{initialize_openssl(), [](void *) { EVP_cleanup(); }};
+    using namespace std::string_literals;
+    auto v = Debugging::parseBytesArray("1400000cc5424cfd 11a371fac0b09705"s);
+    auto v0 = encryptAES_128_GCM(AEADEncFnArgsType{
+        Debugging::parseBytesArray("578e306366cee7ba 9f78c884c9f6e956"s),
+        Debugging::parseBytesArray("0000000000000000"s),
+        v,
+        Debugging::parseBytesArray("0000000000000000 1603030010"s),
+        Debugging::parseBytesArray("ba3a146c"s),
+    });
+    Debugging::pu8Vec(v0);
+    auto v1 = decryptAES_128_GCM(AEADDecFnArgsType{
+        Debugging::parseBytesArray("578e306366cee7ba 9f78c884c9f6e956"s),
+        Debugging::parseBytesArray("0000000000000000"s),
+        v0,
+        Debugging::parseBytesArray("0000000000000000 1603030010"s),
+        Debugging::parseBytesArray("ba3a146c"s),
+    });
+    Debugging::pu8Vec(v1);
+    assert(v1 == v);
+
+    //return 0;
     bool hasNetworkConn = true;
     sockaddr_in server_addr;
     {
@@ -64,23 +87,23 @@ int main()
         server_addr.sin_addr = ((struct sockaddr_in *)res->ai_addr)->sin_addr;
     }
 
+    TLS_Session tlss{
+        TLS_Version::TLS_1_2,
+        {
+            CipherSuite::TLS_RSA_WITH_AES_256_CBC_SHA256,
+            CipherSuite::TLS_RSA_WITH_AES_256_CBC_SHA,
+            CipherSuite::TLS_RSA_WITH_AES_128_CBC_SHA256,
+            CipherSuite::TLS_RSA_WITH_AES_128_CBC_SHA,
+            CipherSuite::TLS_RSA_WITH_AES_128_GCM_SHA256,
+        },
+        {
+            CompressionMethod::NULL_,
+        },
+        {
+            std::make_unique<TLSExt_ServerName>(hostname),
+        },
+    };
     try {
-        TLS_Session tlss{
-            TLS_Version::TLS_1_2,
-            {
-                CipherSuite::TLS_RSA_WITH_AES_256_CBC_SHA256,
-                CipherSuite::TLS_RSA_WITH_AES_256_CBC_SHA,
-                CipherSuite::TLS_RSA_WITH_AES_128_CBC_SHA256,
-                CipherSuite::TLS_RSA_WITH_AES_128_CBC_SHA,
-                // CipherSuite::TLS_RSA_WITH_AES_128_GCM_SHA256,
-            },
-            {
-                CompressionMethod::NULL_,
-            },
-            {
-                std::make_unique<TLSExt_ServerName>(hostname),
-            },
-        };
         auto ch = tlss.TLS_writeClientHello();
         auto res = TLS_composeRecordLayer(ch);
         int socket_;
@@ -295,26 +318,26 @@ int main()
                 }
             }
         }
-        {
-            Debugging::pu8Vec(Debugging::forceU8Vise(to_big_endian(tlss.m_state_)), 8, true,
-                              "tls session state");
-            Debugging::pu8Vec(tlss.m_serverRandom, 8, true, "parsed server random");
-            Debugging::pu8Vec(tlss.m_sessionID, 8, true, "parsed session id");
-            Debugging::pu8Vec(Debugging::forceU8Vise(to_big_endian(*tlss.m_selectedCipherSuite)), 8,
-                              true, "selected cipher suite");
-            Debugging::pu8Vec(Debugging::forceU8Vise(*tlss.m_selectedCompressionMethod), 8, true,
-                              "m_selectedCompressionMethod");
-            Debugging::pu8Vec(tlss.m_serverPubKey, 8, true, "server pubkey");
-            Debugging::pu8Vec(tlss.m_preMasterSecret, 8, true, "pre-master secret");
-            Debugging::pu8Vec(tlss.m_masterSecret, 8, true, "master secret");
-            Debugging::pu8Vec(tlss.getKeyBlock(), 8, true, "keyblock");
-        }
     } catch (std::exception &e) {
         std::cerr << "what(): " << e.what() << '\n';
     } catch (...) {
         std::cerr << "Unknown exception\n";
     }
-    if (!hasNetworkConn || false) return EXIT_FAILURE;
+    {
+        Debugging::pu8Vec(Debugging::forceU8Vise(to_big_endian(tlss.m_state_)), 8, true,
+                          "tls session state");
+        Debugging::pu8Vec(tlss.m_serverRandom, 8, true, "parsed server random");
+        Debugging::pu8Vec(tlss.m_sessionID, 8, true, "parsed session id");
+        Debugging::pu8Vec(Debugging::forceU8Vise(to_big_endian(*tlss.m_selectedCipherSuite)), 8,
+                          true, "selected cipher suite");
+        Debugging::pu8Vec(Debugging::forceU8Vise(*tlss.m_selectedCompressionMethod), 8, true,
+                          "m_selectedCompressionMethod");
+        Debugging::pu8Vec(tlss.m_serverPubKey, 8, true, "server pubkey");
+        Debugging::pu8Vec(tlss.m_preMasterSecret, 8, true, "pre-master secret");
+        Debugging::pu8Vec(tlss.m_masterSecret, 8, true, "master secret");
+        Debugging::pu8Vec(tlss.getKeyBlock(), 8, true, "keyblock");
+    }
+    if (!hasNetworkConn || true) return EXIT_FAILURE;
 
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     unique_ptr_with_deleter<int> sock_ptr{&sock, [](int *s) { ::close(*s); }};

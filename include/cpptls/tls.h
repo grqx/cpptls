@@ -12,6 +12,7 @@
 #include <cpptls/tls_types.h>
 #include <cpptls/unique_container.h>
 
+#include <cassert>
 #include <cstdint>
 #include <ctime>
 #include <fstream>
@@ -266,14 +267,14 @@ class LIBCPPTLS_API TLS_Session
     /// @param serverHello const lvalue reference to a TLSPlaintext struct, should
     /// contain the server hello/server hello done packet
     /// @return true if succeeded, false if failed
-    bool TLS_parseServerHello(const TLSPlaintext &serverHello)
+    bool TLS_parseServerHello(const TLSPlaintext &server_hs)
     {
         if (m_state_ != TLS_State_::ClientHelloDone) return false;
-        if (serverHello.contTyp != ContentType::Handshake)
+        if (server_hs.contTyp != ContentType::Handshake)
             throw TLS_Alert(TLS_AlertCode::UnexpectedMessage, true);
-        if (serverHello.recordVersion != m_vsn) return false;
+        if (server_hs.recordVersion != m_vsn) return false;
 
-        auto hs = TLS_Handshake::parse(serverHello, true);
+        auto hs = TLS_Handshake::parse(server_hs, true);
         if (!hs) return false;
         auto parsed = 0;
         auto csize = hs->m_cont.size();
@@ -352,8 +353,7 @@ class LIBCPPTLS_API TLS_Session
         if (parsed < csize)
             throw TLS_Alert(TLS_AlertCode::DecodeError,
                             true);  // invalid redundant content
-        std::copy(serverHello.realCont.begin(), serverHello.realCont.end(),
-                  std::back_inserter(m_handshakeMessages));
+        m_handshakeMessages.insert(m_handshakeMessages.end(), server_hs.realCont.begin(), server_hs.realCont.end());
         return true;
     }
 
@@ -363,7 +363,7 @@ class LIBCPPTLS_API TLS_Session
         if (m_state_ != TLS_State_::ServerHelloDone) return std::nullopt;
         m_preMasterSecret = std::vector<uint8_t>(48, 0);
         stdcopy_to_big_endian(static_cast<uint16_t>(m_vsn), m_preMasterSecret.begin());
-        fillRand(m_preMasterSecret, m_preMasterSecret.begin() + 2, m_preMasterSecret.end());
+        fillRand(m_preMasterSecret.begin() + 2, m_preMasterSecret.end());
         auto pmsEnc =
             ChatGPT4o::encRSA(m_preMasterSecret, ChatGPT4o::deserializePublicKey(m_serverPubKey));
         auto pmsEncSize = pmsEnc.size();
@@ -385,8 +385,8 @@ class LIBCPPTLS_API TLS_Session
                                      getCSInfo().PRFHashInfo);
         }
         auto ckxPacket = ckx.toPacket(m_vsn);
-        std::copy(ckxPacket.realCont.begin(), ckxPacket.realCont.end(),
-                  std::back_inserter(m_handshakeMessages));
+        m_handshakeMessages.reserve(m_handshakeMessages.size() + ckxPacket.realCont.size() + 4 + getCSInfo().verifyDataLength);
+        m_handshakeMessages.insert(m_handshakeMessages.end(), ckxPacket.realCont.begin(), ckxPacket.realCont.end());
 
         m_state_ = TLS_State_::KexDone;
         m_cSChanged |= CipherSpecChangedFlag::clientChanged;
@@ -414,6 +414,7 @@ class LIBCPPTLS_API TLS_Session
         TLS_Handshake cfinished{HandshakeType::Finished, verifyData};
         auto packet = cfinished.toPacket(m_vsn);
         Debugging::pu8Vec(packet.realCont, 8, true, "Client Finished content");
+        m_handshakeMessages.insert(m_handshakeMessages.end(), packet.realCont.begin(), packet.realCont.end());
         packet.realCont = encPlainText(packet);
         Debugging::pu8Vec(packet.realCont, 8, true, "Client Finished content(encrypted)");
         m_state_ = TLS_State_::ClientFinished_;
@@ -425,8 +426,8 @@ class LIBCPPTLS_API TLS_Session
         if (!(m_cSChanged & CipherSpecChangedFlag::clientChanged))
             throw std::runtime_error(
                 "Client hasn't sent change cipher spec but requested encryption");
-        std::vector<uint8_t> dataToHash;
-        dataToHash.reserve(getCSInfo().ci.blockSize ? 13 + tpt.realCont.size() : 13);
+        std::vector<uint8_t> dataToHash {};
+        dataToHash.reserve(13 + (getCSInfo().ci.blockSize ? tpt.realCont.size() : 0));
         stdcopy_to_big_endian(m_seqNum++, std::back_inserter(dataToHash));
         dataToHash.push_back(static_cast<uint8_t>(tpt.contTyp));
         stdcopy_to_big_endian(m_vsn, std::back_inserter(dataToHash), 2);
@@ -500,35 +501,34 @@ class LIBCPPTLS_API TLS_Session
              *    };
              * } GenericAEADCipher;
              */
-            // auto nonceExplicit = genRand(getCSInfo().ci.recordIVLength);  //
-            // SecurityParameters.record_iv_length some1 said that the nonce_explicit should be seq
-            // num some1 said that 000001 is appended to the nonce to make it 128bit
-            std::vector<uint8_t> nonceExplicit(getCSInfo().ci.recordIVLength);
-            fillRand(nonceExplicit, nonceExplicit.begin(),
-                     nonceExplicit.begin() + getCSInfo().ci.recordIVLength - 3);
-            copy_to_ptr_big_endian(m_seqNum - 1,
-                                   nonceExplicit.data() + getCSInfo().ci.recordIVLength - 3,
-                                   3);  // SecurityParameters.record_iv_length
+            std::vector<uint8_t> cipherText {};
+            assert(getCSInfo().ci.recordIVLength == sizeof m_seqNum);  // temp, for debug
+            cipherText.reserve(getCSInfo().ci.recordIVLength + tpt.realCont.size() + 16);
+            // explicit nonce is of length SecurityParameters.record_iv_length
+            stdcopy_to_big_endian(m_seqNum - 1, std::back_inserter(cipherText));
+            // m_seqNum has been incremented already, restore the old value
             /*
              * AEADEncrypted = AEAD-Encrypt(write_key, nonce, plaintext,
              *                  additional_data)
              */
             // dataToHash = additional_data
+            // enc.aead is encryptAES_128_GCM
             auto enc = getCSInfo().ci.enc.aead(
-                {getClientWriteKey(), nonceExplicit, tpt.realCont, dataToHash, getClientWriteIV()});
+                {/*key=*/getClientWriteKey(), /*nonceExplicit=*/cipherText, /*data=*/tpt.realCont, /*additionalData=*/dataToHash, /*writeIV=*/getClientWriteIV()});
+            // dec.aead is decryptAES_128_GCM
             auto decd = getCSInfo().ci.dec.aead(
-                {getClientWriteKey(), nonceExplicit, enc, dataToHash, getClientWriteIV()});
-            if (enc != decd) throw TLS_Alert(TLS_AlertCode::InternalError, true);
+                {/*key=*/getClientWriteKey(), /*nonceExplicit=*/cipherText, /*data=*/enc, /*additionalData=*/dataToHash, /*readIV=*/getClientWriteIV()});
+            assert(tpt.realCont == decd);
             {
                 Debugging::pu8Vec(dataToHash, 8, true, "AEAD AAD");
                 Debugging::pu8Vec(tpt.realCont, 8, true, "raw data to encrypt");
                 Debugging::pu8Vec(getClientWriteKey(), 8, true, "wkey");
-                Debugging::pu8Vec(nonceExplicit, 8, true, "AEAD explicit nonce/IV");
+                Debugging::pu8Vec(cipherText, 8, true, "AEAD explicit nonce/IV");
                 Debugging::pu8Vec(getClientWriteIV(), 8, true, "AEAD client write IV(salt)");
                 Debugging::pu8Vec(enc, 8, true, "AEAD-encrypted data");
             }
-            nonceExplicit.insert(nonceExplicit.end(), enc.begin(), enc.end());
-            return nonceExplicit;
+            cipherText.insert(cipherText.end(), enc.begin(), enc.end());
+            return cipherText;
         }
         UNREACHABLE;
     }
@@ -561,9 +561,8 @@ class LIBCPPTLS_API TLS_Session
             Debugging::pu8Vec(expected, 8, true, "expected server finished");
             Debugging::pu8Vec(hs->m_cont, 8, true, "got server finished");
             auto s = expected == hs->m_cont;
-            std::cout << (s ? "true" : "false") << '\n';
-            // FIXME
-            // if (!s) throw TLS_Alert(TLS_AlertCode::HandshakeFailure, true);
+            std::cout << (s ? "true" : "server finished MISMATCH") << '\n';
+            if (!s) throw TLS_Alert(TLS_AlertCode::BadRecordMAC, true);
             parsed = packet.realCont.size();
             m_state_ = TLS_State_::ServerFinished_;
         } else if (packet.contTyp == ContentType::ChangeCipherSpec) {
@@ -606,18 +605,18 @@ class LIBCPPTLS_API TLS_Session
             dec.resize(dec.size() - getCSInfo().mi.macKeyLength);
             stdcopy_to_big_endian(dec.size(), std::back_inserter(dataToHash), 2);
             dataToHash.insert(dataToHash.end(), dec.begin(), dec.end());
-            auto hash_ = hmac(getServerWriteMACKey(), dataToHash, getCSInfo().PRFHashInfo);
+            auto hash_ = hmac(getServerWriteMACKey(), dataToHash, getCSInfo().mi.MACHashInfo);
             if (mac != hash_) {
-                Debugging::pu8Vec(dataToHash, 8, true, "MAC mismatch: constructed data to hash");
-                Debugging::pu8Vec(hash_, 8, true, "MAC mismatch: expected MAC");
-                Debugging::pu8Vec(mac, 8, true, "MAC mismatch: got MAC");
-                // throw TLS_Alert(TLS_AlertCode::BadRecordMAC, true);
+                Debugging::pu8Vec(dataToHash, 8, true, "MAC MISMATCH: constructed data to hash");
+                Debugging::pu8Vec(hash_, 8, true, "MAC MISMATCH: expected MAC");
+                Debugging::pu8Vec(mac, 8, true, "MAC MISMATCH: got MAC");
+                throw TLS_Alert(TLS_AlertCode::BadRecordMAC, true);
             }
             return dec;
         } else {  // AEAD cipher
             // TODO: add this as a property of a AEAD cipher
             auto AEADOverhead = 16;
-            stdcopy_to_big_endian(packet.realCont.size() - AEADOverhead,
+            stdcopy_to_big_endian(packet.realCont.size() - AEADOverhead - getCSInfo().ci.recordIVLength,
                                   std::back_inserter(dataToHash), 2);
             std::vector<uint8_t> decIV{packet.realCont.begin(),
                                        packet.realCont.begin() + getCSInfo().ci.recordIVLength};
@@ -666,8 +665,8 @@ class LIBCPPTLS_API TLS_Session
  *    into a single TLSPlaintext record, or a single message MAY be
  *    fragmented across several records).
  */
-LIBCPPTLS_API
-[[nodiscard]] std::list<std::vector<uint8_t>> TLS_composeRecordLayer(const TLSPlaintext &cont)
+LIBCPPTLS_API [[nodiscard]] inline
+std::list<std::vector<uint8_t>> TLS_composeRecordLayer(const TLSPlaintext &cont)
 {
     size_t packetLen_ = cont.realCont.size();
     if (packetLen_ > UINT16_MAX) {
@@ -695,7 +694,7 @@ struct LIBCPPTLS_API TLS_parseRecordLayerResult_ {
     size_t parsedBytes;
 };
 
-LIBCPPTLS_API
+inline LIBCPPTLS_API
 TLS_parseRecordLayerResult_ TLS_parseRecordLayer(const std::vector<uint8_t> &packet)
 {
     std::cout << "packet of " << packet.size() << " bytes\n";

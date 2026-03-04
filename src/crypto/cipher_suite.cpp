@@ -32,6 +32,11 @@ CipherSuiteInfo getCipherSuiteInfo(const CipherSuite &cipherSuite)
         64,
         HashAlgo_SHA384::hi,
     };
+    constexpr static MACInfo AEAD{
+        0,
+        0,
+        {nullptr, 0},
+    };
 
     if (cipherSuite == CipherSuite::TLS_RSA_WITH_AES_128_CBC_SHA)
         return {RSA_KI, AES_128_CBC, SHA1, SHA256.MACHashInfo};
@@ -42,6 +47,6 @@ CipherSuiteInfo getCipherSuiteInfo(const CipherSuite &cipherSuite)
     else if (cipherSuite == CipherSuite::TLS_RSA_WITH_AES_256_CBC_SHA256)
         return {RSA_KI, AES_256_CBC, SHA256, SHA256.MACHashInfo};
     else if (cipherSuite == CipherSuite::TLS_RSA_WITH_AES_128_GCM_SHA256)
-        return {RSA_KI, AES_128_GCM, SHA256, SHA256.MACHashInfo};
+        return {RSA_KI, AES_128_GCM, AEAD, SHA256.MACHashInfo};
     UNREACHABLE;
 }

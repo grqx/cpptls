@@ -3,6 +3,7 @@
 #include <cpptls/tls_memory.h>
 
 #include <algorithm>
+#include <cassert>
 #include <stdexcept>
 // TODO: port AES 256 GCM
 // ossl afalg impl:
@@ -12,9 +13,7 @@
 #ifdef __linux__
 #include <linux/version.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0)
-#ifndef _GNU_SOURCE
 #define _GNU_SOURCE 1
-#endif
 #include <fcntl.h>
 #include <linux/if_alg.h>
 #include <sys/socket.h>
@@ -27,6 +26,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <sys/uio.h>
 using namespace std::string_literals;
 
 namespace {
@@ -61,13 +61,20 @@ std::optional<std::vector<uint8_t>> linuxCryptoAPI_crypt(const uint8_t *key, con
         if (setsockopt(alg_s, SOL_ALG, ALG_SET_KEY, key, KEY_SIZE) == -1)
             throw std::runtime_error("Failed to set key");
 
+        if constexpr (TAG_SIZE) {
+            if (setsockopt(alg_s, SOL_ALG, ALG_SET_AEAD_AUTHSIZE, NULL, TAG_SIZE) == -1)
+                throw std::runtime_error("Failed to set AEAD Auth size");
+        }
+
         aes_fd = accept(alg_s, nullptr, nullptr);
         close(alg_s);
         alg_s = -1;
+
         if (aes_fd == -1) throw std::runtime_error("Accept failed");
 
         uint8_t cmsg_buf[CMSG_SPACE(sizeof(uint32_t)) +
-                         CMSG_SPACE(sizeof(struct af_alg_iv) + IV_SIZE)] = {0};
+                         CMSG_SPACE(sizeof(struct af_alg_iv) + IV_SIZE) +
+                         (TAG_SIZE ? CMSG_SPACE(sizeof(uint32_t)) : 0)] = {0};
         struct msghdr msg {
         };
         msg.msg_control = cmsg_buf;
@@ -88,12 +95,12 @@ std::optional<std::vector<uint8_t>> linuxCryptoAPI_crypt(const uint8_t *key, con
         iv_data->ivlen = IV_SIZE;
         std::memcpy(iv_data->iv, iv, IV_SIZE);
 
-        if (TAG_SIZE) {
+        if constexpr (TAG_SIZE) {
             cmsg = CMSG_NXTHDR(&msg, cmsg);
-            cmsg->cmsg_len = CMSG_LEN(sizeof(aadLen));
+            cmsg->cmsg_len = CMSG_LEN(sizeof(uint32_t));
             cmsg->cmsg_level = SOL_ALG;
             cmsg->cmsg_type = ALG_SET_AEAD_ASSOCLEN;
-            std::memcpy(CMSG_DATA(cmsg), &aadLen, sizeof(aadLen));
+            *reinterpret_cast<uint32_t *>(CMSG_DATA(cmsg)) = aadLen;
         }
 
         if (sendmsg(aes_fd, &msg, 0) == -1) throw std::runtime_error("sendmsg failed");
@@ -127,8 +134,13 @@ std::optional<std::vector<uint8_t>> linuxCryptoAPI_crypt(const uint8_t *key, con
 
         if (splice(pipes[0], nullptr, aes_fd, nullptr, data.size(), 0) == -1)
             throw std::runtime_error("splice failed");
-        auto readBytes = read(aes_fd, output.data(), output.size());
-        if (readBytes == output.size()) {
+        std::vector<uint8_t> unused_aad(aadLen);
+        struct iovec iov_read[2] = {
+            {unused_aad.data(), unused_aad.size()},
+            {output.data(), output.size()},
+        };
+        auto readBytes = readv(aes_fd, iov_read, 2);
+        if (readBytes == unused_aad.size() + output.size()) {
             close(pipes[0]);
             pipes[0] = -1;
             close(pipes[1]);
@@ -172,6 +184,12 @@ std::optional<std::vector<uint8_t>> linuxCryptoAPI_crypt(const uint8_t *key, con
 
 #ifndef AES_IMPL_HAS_OSSL
 #include <openssl/evp.h>
+
+typedef const EVP_CIPHER *(CipherGetterFn)();
+
+template <size_t KEY_SIZE, typename = std::enable_if_t<KEY_SIZE == 16>>
+constexpr static CipherGetterFn *AESGCM_CipherGetterFnPtr = &EVP_aes_128_gcm;
+
 namespace {
 std::optional<std::vector<uint8_t>> openSSLAPI_crypt(BlockOrStreamEncFnArgsType args,
                                                      const EVP_CIPHER *cipher)
@@ -199,6 +217,117 @@ std::optional<std::vector<uint8_t>> openSSLAPI_crypt(BlockOrStreamEncFnArgsType 
         ctx = nullptr;
         return std::nullopt;
     }
+}
+
+template <size_t KEY_SIZE, size_t TAG_SIZE = 16>
+static
+std::vector<uint8_t> encryptAES_GCM(AEADEncFnArgsType args)
+{
+    if (args.data.empty()) return args.data;
+    if (args.key.size() != KEY_SIZE) throw std::invalid_argument("AES-GCM Key size mismatch");
+    if (args.writeIV.size() != 4)
+        throw std::invalid_argument("writeIV size must be 4 bytes for AES-GCM");
+    if (args.nonceExplicit.size() != 8)
+        throw std::invalid_argument("nonceExplicit size must be 8 bytes for AES-GCM");
+
+    uint8_t nonce[12];
+    std::copy(args.writeIV.begin(), args.writeIV.end(), nonce);
+    std::copy(args.nonceExplicit.begin(), args.nonceExplicit.end(), nonce + 4);
+#ifdef AES_IMPL_HAS_LINUX
+    if (auto caRes = linuxCryptoAPI_crypt<true, KEY_SIZE, 12UL, TAG_SIZE>(
+            args.key.data(), nonce, args.data, AEADAlgoType, AES_GCMAlgoName,
+            args.additionalData.size(), args.additionalData.data()))
+        return *caRes;
+    std::cerr << __func__ << ": Falling back to OpenSSL\n"s;
+#endif
+    unique_ptr_with_fnptr_deleter<EVP_CIPHER_CTX> ctx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
+    if (!ctx) throw std::runtime_error("Failed to create EVP_CIPHER_CTX");
+
+    if (EVP_EncryptInit_ex(ctx.get(), AESGCM_CipherGetterFnPtr<KEY_SIZE>(), nullptr, args.key.data(), nonce) != 1)
+        throw std::runtime_error("EVP_EncryptInit_ex failed");
+
+    if (!args.additionalData.empty()) {
+        int outlen = 0;
+        if (EVP_EncryptUpdate(ctx.get(), nullptr, &outlen, args.additionalData.data(),
+                              args.additionalData.size()) != 1)
+        assert(outlen == args.additionalData.size());
+    }
+
+    std::vector<uint8_t> ciphertext(args.data.size() + TAG_SIZE);
+    int ciphertext_len;
+    if (EVP_EncryptUpdate(ctx.get(), ciphertext.data(), &ciphertext_len, args.data.data(),
+                          args.data.size()) != 1)
+        throw std::runtime_error("EVP_EncryptUpdate failed");
+    assert(ciphertext_len = args.data.size());
+
+    int outlen = 0;
+    if (EVP_EncryptFinal_ex(ctx.get(), ciphertext.data() + outlen, &outlen) != 1)
+        throw std::runtime_error("EVP_EncryptFinal_ex failed");
+    assert(!outlen);
+    ciphertext_len += outlen;
+
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_GET_TAG, TAG_SIZE, ciphertext.data() + ciphertext.size() - TAG_SIZE) != 1)
+        throw std::runtime_error("EVP_CIPHER_CTX_ctrl (GET_TAG) failed");
+
+    return ciphertext;
+}
+
+template <size_t KEY_SIZE, size_t TAG_SIZE = 16>
+static
+std::vector<uint8_t> decryptAES_GCM(AEADDecFnArgsType args)
+{
+    if (args.encryptedData.empty()) return args.encryptedData;
+    if (args.key.size() != KEY_SIZE) throw std::invalid_argument("AES-GCM Key size mismatch");
+    if (args.readIV.size() != 4)
+        throw std::invalid_argument("readIV size must be 4 bytes for AES-GCM");
+    if (args.nonceExplicit.size() != 8)
+        throw std::invalid_argument("nonceExplicit size must be 8 bytes for AES-GCM");
+    if (args.encryptedData.size() < TAG_SIZE)
+        throw std::invalid_argument("Encrypted data too short; missing authentication tag");
+
+    // Construct the 12-byte nonce: implicit (readIV, 4 bytes) || explicit (nonceExplicit, 8 bytes)
+    uint8_t nonce[12];
+    std::copy(args.readIV.begin(), args.readIV.end(), nonce);
+    std::copy(args.nonceExplicit.begin(), args.nonceExplicit.end(), nonce + 4);
+#ifdef AES_IMPL_HAS_LINUX
+    if (auto caRes = linuxCryptoAPI_crypt<false, KEY_SIZE, 12UL, TAG_SIZE>(
+            args.key.data(), nonce, args.encryptedData, AEADAlgoType, AES_GCMAlgoName,
+            args.additionalData.size(), args.additionalData.data()))
+        return *caRes;
+    std::cerr << __func__ + ": Falling back to OpenSSL\n"s;
+#endif
+
+    size_t ciphertext_len = args.encryptedData.size() - TAG_SIZE;
+    std::vector<uint8_t> ciphertext(args.encryptedData.begin(),
+                                    args.encryptedData.begin() + ciphertext_len);
+    std::vector<uint8_t> tag(args.encryptedData.begin() + ciphertext_len, args.encryptedData.end());
+    unique_ptr_with_fnptr_deleter<EVP_CIPHER_CTX> ctx(EVP_CIPHER_CTX_new(),EVP_CIPHER_CTX_free);
+    if (!ctx) throw std::runtime_error("Failed to create EVP_CIPHER_CTX");
+
+    if (EVP_DecryptInit_ex(ctx.get(), AESGCM_CipherGetterFnPtr<KEY_SIZE>(), nullptr, args.key.data(), nonce) != 1)
+        throw std::runtime_error("EVP_DecryptInit_ex failed");
+
+    int outlen = 0;
+    if (!args.additionalData.empty()) {
+        if (EVP_DecryptUpdate(ctx.get(), nullptr, &outlen, args.additionalData.data(),
+                              args.additionalData.size()) != 1)
+            throw std::runtime_error("EVP_DecryptUpdate (AAD) failed");
+    }
+
+    std::vector<uint8_t> plaintext(ciphertext.size());
+    if (EVP_DecryptUpdate(ctx.get(), plaintext.data(), &outlen, ciphertext.data(),
+                          ciphertext.size()) != 1)
+        throw std::runtime_error("EVP_DecryptUpdate failed");
+    int plaintext_len = outlen;
+
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_TAG, tag.size(), tag.data()) != 1)
+        throw std::runtime_error("EVP_CIPHER_CTX_ctrl (SET_TAG) failed");
+
+    if (EVP_DecryptFinal_ex(ctx.get(), plaintext.data() + outlen, &outlen) != 1)
+        throw std::runtime_error("EVP_DecryptFinal_ex failed: authentication tag mismatch");
+    plaintext_len += outlen;
+    plaintext.resize(plaintext_len);
+    return plaintext;
 }
 }  // namespace
 #define AES_IMPL_HAS_OSSL
@@ -343,145 +472,9 @@ std::vector<uint8_t> decryptAES_256_CBC(BlockOrStreamDecFnArgsType args)
     return plaintext;
 }
 
-std::vector<uint8_t> encryptAES_128_GCM(AEADEncFnArgsType args)
-{
-    if (args.data.empty()) return args.data;
-    if (args.key.size() != 16) throw std::invalid_argument("Key size must be 16 bytes for AES-128");
-    if (args.writeIV.size() != 4)
-        throw std::invalid_argument("writeIV size must be 4 bytes for AES-GCM");
-    if (args.nonceExplicit.size() != 8)
-        throw std::invalid_argument("nonceExplicit size must be 8 bytes for AES-GCM");
-
-    // Construct the 12-byte nonce: implicit (writeIV, 4 bytes) || explicit (nonceExplicit, 8 bytes)
-    uint8_t nonce[12];
-    std::copy(args.writeIV.begin(), args.writeIV.end(), nonce);
-    std::copy(args.nonceExplicit.begin(), args.nonceExplicit.end(), nonce + 4);
-#ifdef AES_IMPL_HAS_LINUX
-    if (auto caRes = linuxCryptoAPI_crypt<true, 16UL, 16UL, 16UL>(
-            args.key.data(), nonce, args.data, AEADAlgoType, AES_GCMAlgoName,
-            args.additionalData.size(), args.additionalData.data()))
-        return *caRes;
-    std::cerr << __func__ + ": Falling back to OpenSSL\n"s;
-#endif
-    unique_ptr_with_fnptr_deleter<EVP_CIPHER_CTX> ctx(EVP_CIPHER_CTX_new(),
-                                                      [](EVP_CIPHER_CTX *ptr) {
-                                                          if (ptr) EVP_CIPHER_CTX_free(ptr);
-                                                      });
-    if (!ctx) throw std::runtime_error("Failed to create EVP_CIPHER_CTX");
-
-    // Initialise encryption context with AES-128-GCM (key and nonce will be provided subsequently)
-    if (EVP_EncryptInit_ex(ctx.get(), EVP_aes_128_gcm(), nullptr, nullptr, nullptr) != 1)
-        throw std::runtime_error("EVP_EncryptInit_ex failed");
-
-    // Set the IV length to 12 bytes (nonce size)
-    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN, 12, nullptr) != 1)
-        throw std::runtime_error("EVP_CIPHER_CTX_ctrl (SET_IVLEN) failed");
-
-    // Provide key and IV (nonce)
-    if (EVP_EncryptInit_ex(ctx.get(), nullptr, nullptr, args.key.data(), nonce) != 1)
-        throw std::runtime_error("EVP_EncryptInit_ex (key/IV) failed");
-
-    int outlen = 0;
-    // Process any additional authenticated data (AAD)
-    if (!args.additionalData.empty()) {
-        if (EVP_EncryptUpdate(ctx.get(), nullptr, &outlen, args.additionalData.data(),
-                              args.additionalData.size()) != 1)
-            throw std::runtime_error("EVP_EncryptUpdate (AAD) failed");
-    }
-
-    // Allocate output buffer for ciphertext (plaintext size)
-    std::vector<uint8_t> ciphertext(args.data.size());
-    if (EVP_EncryptUpdate(ctx.get(), ciphertext.data(), &outlen, args.data.data(),
-                          args.data.size()) != 1)
-        throw std::runtime_error("EVP_EncryptUpdate failed");
-    int ciphertext_len = outlen;
-
-    // Finalise encryption (GCM doesn't output additional ciphertext here)
-    if (EVP_EncryptFinal_ex(ctx.get(), ciphertext.data() + outlen, &outlen) != 1)
-        throw std::runtime_error("EVP_EncryptFinal_ex failed");
-    ciphertext_len += outlen;
-    // Note: ciphertext_len should equal args.data.size() here
-
-    // Retrieve the 16-byte authentication tag
-    std::vector<uint8_t> tag(16);
-    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_GET_TAG, tag.size(), tag.data()) != 1)
-        throw std::runtime_error("EVP_CIPHER_CTX_ctrl (GET_TAG) failed");
-
-    // Append the tag to the ciphertext
-    ciphertext.insert(ciphertext.end(), tag.begin(), tag.end());
-    return ciphertext;
+std::vector<uint8_t> encryptAES_128_GCM(AEADEncFnArgsType args) {
+    return encryptAES_GCM<16>(args);
 }
-
-std::vector<uint8_t> decryptAES_128_GCM(AEADDecFnArgsType args)
-{
-    if (args.encryptedData.empty()) return args.encryptedData;
-    if (args.key.size() != 16) throw std::invalid_argument("Key size must be 16 bytes for AES-128");
-    if (args.readIV.size() != 4)
-        throw std::invalid_argument("readIV size must be 4 bytes for AES-GCM");
-    if (args.nonceExplicit.size() != 8)
-        throw std::invalid_argument("nonceExplicit size must be 8 bytes for AES-GCM");
-    if (args.encryptedData.size() < 16)
-        throw std::invalid_argument("Encrypted data too short; missing authentication tag");
-
-    // Construct the 12-byte nonce: implicit (readIV, 4 bytes) || explicit (nonceExplicit, 8 bytes)
-    uint8_t nonce[12];
-    std::copy(args.readIV.begin(), args.readIV.end(), nonce);
-    std::copy(args.nonceExplicit.begin(), args.nonceExplicit.end(), nonce + 4);
-#ifdef AES_IMPL_HAS_LINUX
-    if (auto caRes = linuxCryptoAPI_crypt<false, 16UL, 16UL>(
-            args.key.data(), nonce, args.encryptedData, AEADAlgoType, AES_GCMAlgoName,
-            args.additionalData.size(), args.additionalData.data()))
-        return *caRes;
-    std::cerr << __func__ + ": Falling back to OpenSSL\n"s;
-#endif
-
-    // Separate the ciphertext and the authentication tag
-    const size_t tag_len = 16;
-    size_t ciphertext_len = args.encryptedData.size() - tag_len;
-    std::vector<uint8_t> ciphertext(args.encryptedData.begin(),
-                                    args.encryptedData.begin() + ciphertext_len);
-    std::vector<uint8_t> tag(args.encryptedData.begin() + ciphertext_len, args.encryptedData.end());
-    unique_ptr_with_fnptr_deleter<EVP_CIPHER_CTX> ctx(EVP_CIPHER_CTX_new(),
-                                                      [](EVP_CIPHER_CTX *ptr) {
-                                                          if (ptr) EVP_CIPHER_CTX_free(ptr);
-                                                      });
-    if (!ctx) throw std::runtime_error("Failed to create EVP_CIPHER_CTX");
-
-    // Initialise decryption context with AES-128-GCM
-    if (EVP_DecryptInit_ex(ctx.get(), EVP_aes_128_gcm(), nullptr, nullptr, nullptr) != 1)
-        throw std::runtime_error("EVP_DecryptInit_ex failed");
-
-    // Set IV length to 12 bytes
-    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN, 12, nullptr) != 1)
-        throw std::runtime_error("EVP_CIPHER_CTX_ctrl (SET_IVLEN) failed");
-
-    // Provide key and IV (nonce)
-    if (EVP_DecryptInit_ex(ctx.get(), nullptr, nullptr, args.key.data(), nonce) != 1)
-        throw std::runtime_error("EVP_DecryptInit_ex (key/IV) failed");
-
-    int outlen = 0;
-    // Process any additional authenticated data (AAD)
-    if (!args.additionalData.empty()) {
-        if (EVP_DecryptUpdate(ctx.get(), nullptr, &outlen, args.additionalData.data(),
-                              args.additionalData.size()) != 1)
-            throw std::runtime_error("EVP_DecryptUpdate (AAD) failed");
-    }
-
-    // Decrypt the ciphertext
-    std::vector<uint8_t> plaintext(ciphertext.size());
-    if (EVP_DecryptUpdate(ctx.get(), plaintext.data(), &outlen, ciphertext.data(),
-                          ciphertext.size()) != 1)
-        throw std::runtime_error("EVP_DecryptUpdate failed");
-    int plaintext_len = outlen;
-
-    // Set the expected authentication tag for verification
-    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_TAG, tag.size(), tag.data()) != 1)
-        throw std::runtime_error("EVP_CIPHER_CTX_ctrl (SET_TAG) failed");
-
-    // Finalise decryption. If the tag does not verify, this call will fail.
-    if (EVP_DecryptFinal_ex(ctx.get(), plaintext.data() + outlen, &outlen) != 1)
-        throw std::runtime_error("EVP_DecryptFinal_ex failed: authentication tag mismatch");
-    plaintext_len += outlen;
-    plaintext.resize(plaintext_len);
-    return plaintext;
+std::vector<uint8_t> decryptAES_128_GCM(AEADDecFnArgsType args) {
+    return decryptAES_GCM<16>(args);
 }
