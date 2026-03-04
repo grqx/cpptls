@@ -187,40 +187,25 @@ std::optional<std::vector<uint8_t>> linuxCryptoAPI_crypt(const uint8_t *key, con
 
 typedef const EVP_CIPHER *(CipherGetterFn)();
 
-template <size_t KEY_SIZE, typename = std::enable_if_t<KEY_SIZE == 16>>
-constexpr static CipherGetterFn *AESGCM_CipherGetterFnPtr = &EVP_aes_128_gcm;
+template <size_t KEY_SIZE, typename = std::enable_if_t<KEY_SIZE == 16 || KEY_SIZE == 32>>
+constexpr static CipherGetterFn *AESGCM_CipherGetterFnPtr = KEY_SIZE == 16 ? &EVP_aes_128_gcm : &EVP_aes_256_gcm;
+template <size_t KEY_SIZE, typename = std::enable_if_t<KEY_SIZE == 16 || KEY_SIZE == 32>>
+constexpr static CipherGetterFn *AESCBC_CipherGetterFnPtr = (
+    KEY_SIZE == 16 ? &EVP_aes_128_cbc : &EVP_aes_256_cbc);
+
+// TODO: generic std::optional<std::vector<uint8_t>> openSSLAPI_crypt
+#define AES_IMPL_HAS_OSSL
+#ifndef AES_HAS_IMPL
+#define AES_HAS_IMPL
+#endif  // AES_HAS_IMPL
+#endif  // AES_IMPL_HAS_OSSL
+
+#ifndef AES_HAS_IMPL
+#error "No available AES implementation"
+#endif
 
 namespace {
-std::optional<std::vector<uint8_t>> openSSLAPI_crypt(BlockOrStreamEncFnArgsType args,
-                                                     const EVP_CIPHER *cipher)
-{
-    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-    if (!ctx) return std::nullopt;
-    try {
-        if (EVP_EncryptInit_ex(ctx, cipher, nullptr, args.key.data(), args.iv.data()) != 1)
-            throw std::runtime_error("EVP_EncryptInit_ex failed");
-
-        if (EVP_CIPHER_CTX_set_padding(ctx, 0) != 1)
-            throw std::runtime_error("EVP_CIPHER_CTX_set_padding failed");
-        std::vector<uint8_t> ciphertext(args.data.size());
-        int outlen;
-        if (EVP_EncryptUpdate(ctx, ciphertext.data(), &outlen, args.data.data(),
-                              args.data.size()) != 1)
-            throw std::runtime_error("EVP_EncryptUpdate failed");
-        if (EVP_EncryptFinal_ex(ctx, ciphertext.data() + outlen, &outlen) != 1)
-            throw std::runtime_error("EVP_EncryptFinal_ex failed");
-        if (ctx) EVP_CIPHER_CTX_free(ctx);
-        ctx = nullptr;
-        return ciphertext;
-    } catch (std::exception &e) {
-        if (ctx) EVP_CIPHER_CTX_free(ctx);
-        ctx = nullptr;
-        return std::nullopt;
-    }
-}
-
 template <size_t KEY_SIZE, size_t TAG_SIZE = 16>
-static
 std::vector<uint8_t> encryptAES_GCM(AEADEncFnArgsType args)
 {
     if (args.data.empty()) return args.data;
@@ -273,7 +258,6 @@ std::vector<uint8_t> encryptAES_GCM(AEADEncFnArgsType args)
 }
 
 template <size_t KEY_SIZE, size_t TAG_SIZE = 16>
-static
 std::vector<uint8_t> decryptAES_GCM(AEADDecFnArgsType args)
 {
     if (args.encryptedData.empty()) return args.encryptedData;
@@ -329,21 +313,12 @@ std::vector<uint8_t> decryptAES_GCM(AEADDecFnArgsType args)
     plaintext.resize(plaintext_len);
     return plaintext;
 }
-}  // namespace
-#define AES_IMPL_HAS_OSSL
-#ifndef AES_HAS_IMPL
-#define AES_HAS_IMPL
-#endif  // AES_HAS_IMPL
-#endif  // AES_IMPL_HAS_OSSL
 
-#ifndef AES_HAS_IMPL
-#error "No available AES implementation"
-#endif
-
-std::vector<uint8_t> encryptAES_128_CBC(BlockOrStreamEncFnArgsType args)
+template <size_t KEY_SIZE>
+std::vector<uint8_t> encryptAES_CBC(BlockOrStreamEncFnArgsType args)
 {
     if (args.data.empty()) return args.data;
-    if (args.key.size() != 16) throw std::invalid_argument("Key size must be 16 bytes for AES-128");
+    if (args.key.size() != KEY_SIZE) throw std::invalid_argument("AES-CBC key size mismatch");
     if (args.iv.size() != 16) throw std::invalid_argument("IV size must be 16 bytes for AES-CBC");
     if (args.data.size() % 16 != 0)
         throw std::invalid_argument("Data size must be a multiple of 16 bytes for AES");
@@ -357,7 +332,7 @@ std::vector<uint8_t> encryptAES_128_CBC(BlockOrStreamEncFnArgsType args)
         if (ptr) EVP_CIPHER_CTX_free(ptr);
     });
     if (!ctx) throw std::runtime_error("Failed to create EVP_CIPHER_CTX");
-    if (EVP_EncryptInit_ex(ctx.get(), EVP_aes_128_cbc(), nullptr, args.key.data(),
+    if (EVP_EncryptInit_ex(ctx.get(), AESCBC_CipherGetterFnPtr<KEY_SIZE>(), nullptr, args.key.data(),
                            args.iv.data()) != 1)
         throw std::runtime_error("EVP_EncryptInit_ex failed");
 
@@ -373,27 +348,27 @@ std::vector<uint8_t> encryptAES_128_CBC(BlockOrStreamEncFnArgsType args)
     return ciphertext;
 }
 
-std::vector<uint8_t> decryptAES_128_CBC(BlockOrStreamDecFnArgsType args)
+template <size_t KEY_SIZE>
+std::vector<uint8_t> decryptAES_CBC(BlockOrStreamDecFnArgsType args)
 {
     if (args.encryptedData.empty()) return args.encryptedData;
-    if (args.key.size() != 16) throw std::invalid_argument("Key size must be 16 bytes for AES-128");
+    if (args.key.size() != KEY_SIZE) throw std::invalid_argument("AES-CBC key size mismatch");
     if (args.iv.size() != 16) throw std::invalid_argument("IV size must be 16 bytes for AES-CBC");
-    if (args.encryptedData.size() % 16 != 0)
+    if (args.encryptedData.size() & 15)
         throw std::invalid_argument("Data size must be a multiple of 16 bytes for AES");
 #ifdef AES_IMPL_HAS_LINUX
-    if (auto caRes = linuxCryptoAPI_crypt<false, 16UL, 16UL>(args.key.data(), args.iv.data(),
+    if (auto caRes = linuxCryptoAPI_crypt<false, KEY_SIZE, 16UL>(args.key.data(), args.iv.data(),
                                                              args.encryptedData, symmetricAlgoType,
                                                              AES_CBCAlgoName))
         return *caRes;
     std::cerr << __func__ + ": Falling back to OpenSSL\n"s;
 #endif
-    unique_ptr_with_deleter<EVP_CIPHER_CTX> ctx(EVP_CIPHER_CTX_new(), [](EVP_CIPHER_CTX *ptr) {
-        if (ptr) EVP_CIPHER_CTX_free(ptr);
-    });
+    unique_ptr_with_deleter<EVP_CIPHER_CTX> ctx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
     if (!ctx) throw std::runtime_error("Failed to create EVP_CIPHER_CTX");
-    if (EVP_DecryptInit_ex(ctx.get(), EVP_aes_128_cbc(), nullptr, args.key.data(),
+    if (EVP_DecryptInit_ex(ctx.get(), AESCBC_CipherGetterFnPtr<KEY_SIZE>(), nullptr, args.key.data(),
                            args.iv.data()) != 1)
         throw std::runtime_error("EVP_DecryptInit_ex failed");
+
     if (EVP_CIPHER_CTX_set_padding(ctx.get(), 0) != 1)
         throw std::runtime_error("EVP_CIPHER_CTX_set_padding failed");
     std::vector<uint8_t> plaintext(args.encryptedData.size());
@@ -406,70 +381,19 @@ std::vector<uint8_t> decryptAES_128_CBC(BlockOrStreamDecFnArgsType args)
     return plaintext;
 }
 
-std::vector<uint8_t> encryptAES_256_CBC(BlockOrStreamEncFnArgsType args)
-{
-    if (args.data.empty()) return args.data;
-    if (args.key.size() != 32) throw std::invalid_argument("Key size must be 32 bytes for AES-256");
-    if (args.iv.size() != 16) throw std::invalid_argument("IV size must be 16 bytes for AES-CBC");
-    if (args.data.size() % 16 != 0)
-        throw std::invalid_argument("Data size must be a multiple of 16 bytes for AES");
-#ifdef AES_IMPL_HAS_LINUX
-    if (auto caRes = linuxCryptoAPI_crypt<true, 32UL, 16UL>(
-            args.key.data(), args.iv.data(), args.data, symmetricAlgoType, AES_CBCAlgoName))
-        return *caRes;
-    std::cerr << __func__ + ": Falling back to OpenSSL\n"s;
-#endif
-    unique_ptr_with_deleter<EVP_CIPHER_CTX> ctx(EVP_CIPHER_CTX_new(), [](EVP_CIPHER_CTX *ptr) {
-        if (ptr) EVP_CIPHER_CTX_free(ptr);
-    });
-    if (!ctx) throw std::runtime_error("Failed to create EVP_CIPHER_CTX");
-    if (EVP_EncryptInit_ex(ctx.get(), EVP_aes_256_cbc(), nullptr, args.key.data(),
-                           args.iv.data()) != 1)
-        throw std::runtime_error("EVP_EncryptInit_ex failed");
+}  // namespace
 
-    if (EVP_CIPHER_CTX_set_padding(ctx.get(), 0) != 1)
-        throw std::runtime_error("EVP_CIPHER_CTX_set_padding failed");
-    std::vector<uint8_t> ciphertext(args.data.size());
-    int outlen;
-    if (EVP_EncryptUpdate(ctx.get(), ciphertext.data(), &outlen, args.data.data(),
-                          args.data.size()) != 1)
-        throw std::runtime_error("EVP_EncryptUpdate failed");
-    if (EVP_EncryptFinal_ex(ctx.get(), ciphertext.data() + outlen, &outlen) != 1)
-        throw std::runtime_error("EVP_EncryptFinal_ex failed");
-    return ciphertext;
+std::vector<uint8_t> encryptAES_128_CBC(BlockOrStreamEncFnArgsType args) {
+    return encryptAES_CBC<16>(args);
 }
-
-std::vector<uint8_t> decryptAES_256_CBC(BlockOrStreamDecFnArgsType args)
-{
-    if (args.encryptedData.empty()) return args.encryptedData;
-    if (args.key.size() != 32) throw std::invalid_argument("Key size must be 16 bytes for AES-256");
-    if (args.iv.size() != 16) throw std::invalid_argument("IV size must be 16 bytes for AES-CBC");
-    if (args.encryptedData.size() % 16 != 0)
-        throw std::invalid_argument("Data size must be a multiple of 16 bytes for AES");
-#ifdef AES_IMPL_HAS_LINUX
-    if (auto caRes = linuxCryptoAPI_crypt<false, 32UL, 16UL>(args.key.data(), args.iv.data(),
-                                                             args.encryptedData, symmetricAlgoType,
-                                                             AES_CBCAlgoName))
-        return *caRes;
-    std::cerr << __func__ + ": Falling back to OpenSSL\n"s;
-#endif
-    unique_ptr_with_deleter<EVP_CIPHER_CTX> ctx(EVP_CIPHER_CTX_new(), [](EVP_CIPHER_CTX *ptr) {
-        if (ptr) EVP_CIPHER_CTX_free(ptr);
-    });
-    if (!ctx) throw std::runtime_error("Failed to create EVP_CIPHER_CTX");
-    if (EVP_DecryptInit_ex(ctx.get(), EVP_aes_256_cbc(), nullptr, args.key.data(),
-                           args.iv.data()) != 1)
-        throw std::runtime_error("EVP_DecryptInit_ex failed");
-    if (EVP_CIPHER_CTX_set_padding(ctx.get(), 0) != 1)
-        throw std::runtime_error("EVP_CIPHER_CTX_set_padding failed");
-    std::vector<uint8_t> plaintext(args.encryptedData.size());
-    int outlen;
-    if (EVP_DecryptUpdate(ctx.get(), plaintext.data(), &outlen, args.encryptedData.data(),
-                          args.encryptedData.size()) != 1)
-        throw std::runtime_error("EVP_DecryptUpdate failed");
-    if (EVP_DecryptFinal_ex(ctx.get(), plaintext.data() + outlen, &outlen) != 1)
-        throw std::runtime_error("EVP_DecryptFinal_ex failed");
-    return plaintext;
+std::vector<uint8_t> decryptAES_128_CBC(BlockOrStreamDecFnArgsType args) {
+    return decryptAES_CBC<16>(args);
+}
+std::vector<uint8_t> encryptAES_256_CBC(BlockOrStreamEncFnArgsType args) {
+    return encryptAES_CBC<32>(args);
+}
+std::vector<uint8_t> decryptAES_256_CBC(BlockOrStreamDecFnArgsType args) {
+    return decryptAES_CBC<32>(args);
 }
 
 std::vector<uint8_t> encryptAES_128_GCM(AEADEncFnArgsType args) {
@@ -477,4 +401,10 @@ std::vector<uint8_t> encryptAES_128_GCM(AEADEncFnArgsType args) {
 }
 std::vector<uint8_t> decryptAES_128_GCM(AEADDecFnArgsType args) {
     return decryptAES_GCM<16>(args);
+}
+std::vector<uint8_t> encryptAES_256_GCM(AEADEncFnArgsType args) {
+    return encryptAES_GCM<32>(args);
+}
+std::vector<uint8_t> decryptAES_256_GCM(AEADDecFnArgsType args) {
+    return decryptAES_GCM<32>(args);
 }
