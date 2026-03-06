@@ -91,10 +91,10 @@ int main()
         TLS_Version::TLS_1_2,
         {
             //CipherSuite::TLS_RSA_WITH_AES_256_CBC_SHA256,  // not google
-            //CipherSuite::TLS_RSA_WITH_AES_256_CBC_SHA,  // broken
+            //CipherSuite::TLS_RSA_WITH_AES_256_CBC_SHA,
             //CipherSuite::TLS_RSA_WITH_AES_128_CBC_SHA256,  // not google
-            //CipherSuite::TLS_RSA_WITH_AES_128_CBC_SHA,  // required, working
-            //CipherSuite::TLS_RSA_WITH_AES_128_GCM_SHA256,
+            //CipherSuite::TLS_RSA_WITH_AES_128_CBC_SHA,  // required
+            CipherSuite::TLS_RSA_WITH_AES_128_GCM_SHA256,
         },
         {
             CompressionMethod::NULL_,

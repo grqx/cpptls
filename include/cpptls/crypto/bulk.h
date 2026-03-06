@@ -21,7 +21,7 @@ struct LIBCPPTLS_API AEADEncFnArgsType {
     const std::vector<uint8_t> &additionalData;
     // nonce (implicit), writeIV of the current side
     // ought to be fixedIVLength bytes
-    const std::vector<uint8_t> &writeIV;
+    const std::vector<uint8_t> &iv;
 };
 typedef std::vector<uint8_t> (*AEADEncFnType)(AEADEncFnArgsType args);
 
@@ -40,7 +40,7 @@ struct LIBCPPTLS_API AEADDecFnArgsType {
     const std::vector<uint8_t> &additionalData;
     // nonce (implicit), writeIV of the other side
     // ought to be fixedIVLength bytes
-    const std::vector<uint8_t> &readIV;
+    const std::vector<uint8_t> &iv;
 };
 typedef std::vector<uint8_t> (*AEADDecFnType)(AEADDecFnArgsType args);
 

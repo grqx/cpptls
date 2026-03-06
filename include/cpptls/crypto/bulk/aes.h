@@ -21,5 +21,9 @@ LIBCPPTLS_API
 std::vector<uint8_t> encryptAES_128_GCM(AEADEncFnArgsType);
 LIBCPPTLS_API
 std::vector<uint8_t> decryptAES_128_GCM(AEADDecFnArgsType);
+LIBCPPTLS_API
+std::vector<uint8_t> encryptAES_256_GCM(AEADEncFnArgsType args);
+LIBCPPTLS_API
+std::vector<uint8_t> decryptAES_256_GCM(AEADDecFnArgsType args);
 
 #endif
